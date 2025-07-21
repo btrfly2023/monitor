@@ -18,7 +18,7 @@
     "queries": [
         {
             "id": "c2tp_fxs_balance",
-            "chain_id": "ethereum",
+            "chain_name": "ethereum",
             "params": {
                 "chainid": 1,
                 "module": "account",
@@ -30,7 +30,7 @@
         },
         {
             "id": "pool_fxs_balance",
-            "chain_id": "ethereum",
+            "chain_name": "ethereum",
             "params": {
                 "chainid": 1,
                 "module": "account",
@@ -42,7 +42,7 @@
         },
         {
             "id": "pool_cvxfxs_balance",
-            "chain_id": "ethereum",
+            "chain_name": "ethereum",
             "params": {
                 "chainid": 1,
                 "module": "account",
@@ -51,39 +51,85 @@
                 "address": "0x6a9014FB802dCC5efE3b97Fd40aAa632585636D0",
                 "tag": "latest"
             }
+        },
+        {
+            "id": "fraxtal_pool_fxs_balance",
+            "chain_name": "ethereum",
+            "params": {
+                "chainid": 252,
+                "module": "account",
+                "action": "tokenbalance",
+                "contractaddress": "0xFc00000000000000000000000000000000000002",
+                "address": "0x3a38e9b0B5cB034De01d5298Fc2Ed2D793C0C36F",
+                "tag": "latest"
+            }
+        },
+        {
+            "id": "fraxtal_pool_cvxfxs_balance",
+            "chain_name": "ethereum",
+            "params": {
+                "chainid": 252,
+                "module": "account",
+                "action": "tokenbalance",
+                "contractaddress": "0xEFb4B26FC242478c9008274F9e81db89Fa6adAB9",
+                "address": "0x3a38e9b0B5cB034De01d5298Fc2Ed2D793C0C36F",
+                "tag": "latest"
+            }
         }
     ],
     "alerts": [
         {
-            "id": "high_balance_alert",
+            "id": "c2tp_fxs_balance_alert",
             "query_id": "c2tp_fxs_balance",
-            "name": "High FXS Balance",
-            "description": "FXS Balance above threshold",
+            "name": "c2tp got fxs!",
+            "description": "c2tp got fxs!",
             "type": "threshold",
-            "operator": "<",
-            "threshold": "1000000000000000000000",
+            "operator": ">",
+            "threshold": "1000",
             "urgency": "high",
             "cooldown_minutes": 60
         },
         {
-            "id": "high_balance_alert",
+            "id": "pool_fxs_change_alert",
             "query_id": "pool_fxs_balance",
-            "name": "High FXS Balance",
-            "description": "FXS Balance above threshold",
+            "name": "FXS Balance change",
+            "description": "FXS Balance change above threshold",
             "type": "threshold",
             "operator": ">",
-            "threshold": "1000000000000000000000",
+            "threshold": "0.1",
             "urgency": "high",
             "cooldown_minutes": 60
         },
         {
-            "id": "high_balance_alert",
+            "id": "pool_cvxfxs_change_alert",
             "query_id": "pool_cvxfxs_balance",
-            "name": "High FXS Balance",
-            "description": "FXS Balance above threshold",
+            "name": "cvxFXS Balance change",
+            "description": "cvxFXS Balance change above threshold",
             "type": "threshold",
             "operator": ">",
-            "threshold": "1000000000000000000000",
+            "threshold": "0.1",
+            "urgency": "high",
+            "cooldown_minutes": 60
+        },
+        {
+            "id": "fraxtal_pool_fxs_change_alert",
+            "query_id": "fraxtal_pool_fxs_balance",
+            "name": "fraxtal FXS Balance change",
+            "description": "fraxtal FXS Balance change above threshold",
+            "type": "threshold",
+            "operator": ">",
+            "threshold": "0.1",
+            "urgency": "high",
+            "cooldown_minutes": 60
+        },
+        {
+            "id": "fraxtal_pool_cvxfxs_change_alert",
+            "query_id": "fraxtal_pool_cvxfxs_balance",
+            "name": "fraxtal cvxFXS Balance change",
+            "description": "fraxtal cvxFXS Balance change above threshold",
+            "type": "threshold",
+            "operator": ">",
+            "threshold": "0.1",
             "urgency": "high",
             "cooldown_minutes": 60
         }

@@ -129,24 +129,24 @@ class BlockchainMonitor:
             )
             logger.info("Telegram notifier configured")
 
-    def get_chain_api_url(self, chain_id):
+    def get_chain_api_url(self, chain_name):
         chain_configs = {
-            'ethereum': 'https://api.etherscan.io/api',
+            'ethereum': 'https://api.etherscan.io/v2/api',
             'polygon': 'https://api.polygonscan.com/api',
             'bsc': 'https://api.bscscan.com/api',
             # Add more chains as needed
         }
-        return chain_configs.get(chain_id, 'https://api.etherscan.io/api')
+        return chain_configs.get(chain_name, 'https://api.etherscan.io/api')
 
-    def get_api_key(self, chain_id):
+    def get_api_key(self, chain_name):
         api_keys = self.config.get('api_keys', {})
-        return api_keys.get(chain_id, api_keys.get('default', ''))
+        return api_keys.get(chain_name, api_keys.get('default', ''))
 
     def execute_query(self, query):
         query_id = query.get('id', 'unknown')
-        chain_id = query.get('chain_id', 'ethereum')
-        api_url = self.get_chain_api_url(chain_id)
-        api_key = self.get_api_key(chain_id)
+        chain_name = query.get('chain_name', 'ethereum')
+        api_url = self.get_chain_api_url(chain_name)
+        api_key = self.get_api_key(chain_name)
 
         params = query.get('params', {}).copy()
         params['apikey'] = api_key
@@ -168,7 +168,7 @@ class BlockchainMonitor:
 
         for retry in range(max_retries):
             try:
-                logger.debug(f"Executing query {query_id} on {chain_id} (attempt {retry+1}/{max_retries})")
+                logger.debug(f"Executing query {query_id} on {chain_name} (attempt {retry+1}/{max_retries})")
 
                 # Try without proxy first if we're having proxy issues
                 if retry > 0 and proxies:
@@ -182,6 +182,9 @@ class BlockchainMonitor:
 
                 if data.get('status') == '1':
                     result = data.get('result')
+                    # hack, round to 2
+                    if isinstance(result, str):
+                        result = round(float(result)/1e18, 2)
 
                     # Check for changes
                     previous = self.previous_results.get(query_id)

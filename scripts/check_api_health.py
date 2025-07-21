@@ -63,7 +63,7 @@ def load_config():
 
     return config
 
-def get_chain_api_url(chain_id):
+def get_chain_api_url(chain_name):
     """Get the API URL for a specific chain."""
     chain_configs = {
         'ethereum': 'https://api.etherscan.io/api',
@@ -71,11 +71,11 @@ def get_chain_api_url(chain_id):
         'bsc': 'https://api.bscscan.com/api',
         # Add more chains as needed
     }
-    return chain_configs.get(chain_id, 'https://api.etherscan.io/api')
+    return chain_configs.get(chain_name, 'https://api.etherscan.io/api')
 
-def check_api_health(chain_id, api_key):
+def check_api_health(chain_name, api_key):
     """Check if the API is responsive and the key is valid."""
-    api_url = get_chain_api_url(chain_id)
+    api_url = get_chain_api_url(chain_name)
 
     # Use a simple API call that doesn't consume many credits
     params = {
@@ -120,12 +120,12 @@ def main():
 
     results = []
 
-    for chain_id, api_key in api_keys.items():
-        if not api_key or chain_id == 'default':
+    for chain_name, api_key in api_keys.items():
+        if not api_key or chain_name == 'default':
             continue
 
-        print(f"Checking {chain_id.upper()} API...", end="", flush=True)
-        is_healthy, message = check_api_health(chain_id, api_key)
+        print(f"Checking {chain_name.upper()} API...", end="", flush=True)
+        is_healthy, message = check_api_health(chain_name, api_key)
 
         if is_healthy:
             print(" ✅ Healthy")
@@ -133,7 +133,7 @@ def main():
             print(f" ❌ Error: {message}")
 
         results.append({
-            'chain_id': chain_id,
+            'chain_name': chain_name,
             'status': 'healthy' if is_healthy else 'error',
             'message': message
         })
@@ -148,7 +148,7 @@ Summary:")
 Issues found:")
         for result in results:
             if result['status'] != 'healthy':
-                print(f"- {result['chain_id'].upper()}: {result['message']}")
+                print(f"- {result['chain_name'].upper()}: {result['message']}")
 
         print("
 Troubleshooting tips:")

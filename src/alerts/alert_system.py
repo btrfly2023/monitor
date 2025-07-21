@@ -27,7 +27,7 @@ class AlertSystem:
             triggered = False
 
             if alert_type == 'threshold':
-                triggered = self.check_threshold_alert(alert, current_value)
+                triggered = self.check_change_alert(alert, current_value, previous_value)
             elif alert_type == 'percent_change':
                 triggered = self.check_percent_change_alert(alert, current_value, previous_value)
             elif alert_type == 'ratio':
@@ -60,6 +60,22 @@ class AlertSystem:
                 return False
 
         return True
+
+    def check_change_alert(self, alert, current_value, previous_value):
+        """Check if a change alert should be triggered."""
+        try:
+            threshold = float(alert.get('threshold', 0))
+
+            # Convert current_value to float if it's a string
+            if isinstance(current_value, str):
+                current_value = float(current_value)
+            if isinstance(previous_value, str):
+                previous_value = float(previous_value)
+            return abs(current_value - previous_value) > threshold 
+
+        except (ValueError, TypeError) as e:
+            logger.error(f"Error checking change alert: {e}")
+            return False
 
     def check_threshold_alert(self, alert, current_value):
         """Check if a threshold alert should be triggered."""
