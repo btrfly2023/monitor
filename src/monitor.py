@@ -8,6 +8,8 @@ import requests
 from datetime import datetime
 import logging
 from logging.handlers import RotatingFileHandler
+import threading
+import logging
 
 # Add the project root to the path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -38,9 +40,21 @@ class BlockchainMonitor:
     def __init__(self, config_path):
         self.config_path = config_path
         self.load_config()
+        self.start_log_server()
         self.setup_notifiers()
         self.alert_system = AlertSystem(self.config, self.notifiers)
         self.previous_results = {}
+
+    def start_log_server(self):
+        # Import the web log server
+        try:
+            from src.web_log_server import start_web_server
+            
+            # Start the web log server on port 8080 (or any port you prefer)
+            start_web_server(host='0.0.0.0', port=8080)
+            logging.info("Web log server started at http://0.0.0.0:8080")
+        except Exception as e:
+            logging.error(f"Failed to start web log server: {str(e)}") 
 
     def load_config(self):
         try:
@@ -188,6 +202,7 @@ class BlockchainMonitor:
 
                     # Check for changes
                     previous = self.previous_results.get(query_id)
+                    logger.info(f"~~~query {query_id}: {result}")
                     if previous is not None and previous != result:
                         logger.info(f"Change detected for query {query_id}")
 
@@ -285,3 +300,5 @@ if __name__ == "__main__":
 
     monitor = BlockchainMonitor(config_path)
     monitor.start()
+
+
