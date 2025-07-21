@@ -1,0 +1,17 @@
+[Unit]
+Description=Blockchain Monitor Service
+After=network.target
+
+[Service]
+User=blockchain
+Group=blockchain
+WorkingDirectory=/home/blockchain/blockchain-monitor
+ExecStart=/home/blockchain/blockchain-monitor/venv/bin/python -m src.monitor
+Restart=always
+RestartSec=10
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=blockchain-monitor
+
+[Install]
+WantedBy=multi-user.target

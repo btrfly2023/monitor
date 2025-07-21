@@ -1,0 +1,14 @@
+{
+  "api_keys": {
+    "ethereum": "",
+    "polygon": "",
+    "bsc": "",
+    "default": ""
+  },
+  "notifications": {
+    "telegram": {
+      "bot_token": "",
+      "chat_id": ""
+    }
+  }
+}

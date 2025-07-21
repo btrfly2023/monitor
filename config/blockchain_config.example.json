@@ -1,0 +1,64 @@
+{
+  "api_keys": {
+    "ethereum": "YOUR_ETHERSCAN_API_KEY",
+    "polygon": "YOUR_POLYGONSCAN_API_KEY",
+    "bsc": "YOUR_BSCSCAN_API_KEY",
+    "default": "YOUR_DEFAULT_API_KEY"
+  },
+  "notifications": {
+    "telegram": {
+      "bot_token": "YOUR_TELEGRAM_BOT_TOKEN",
+      "chat_id": "YOUR_TELEGRAM_CHAT_ID"
+    }
+  },
+  "settings": {
+    "interval_minutes": 1,
+    "log_retention_days": 7
+  },
+  "queries": [
+    {
+      "id": "eth_balance_1",
+      "chain_id": "ethereum",
+      "params": {
+        "module": "account",
+        "action": "balance",
+        "address": "0xYourEthereumAddress",
+        "tag": "latest"
+      }
+    },
+    {
+      "id": "token_balance_1",
+      "chain_id": "ethereum",
+      "params": {
+        "module": "account",
+        "action": "tokenbalance",
+        "contractaddress": "0xTokenContractAddress",
+        "address": "0xYourEthereumAddress",
+        "tag": "latest"
+      }
+    }
+  ],
+  "alerts": [
+    {
+      "id": "low_balance_alert",
+      "query_id": "eth_balance_1",
+      "name": "Low ETH Balance",
+      "description": "ETH balance has fallen below threshold",
+      "type": "threshold",
+      "operator": "<",
+      "threshold": "1000000000000000000",
+      "urgency": "high",
+      "cooldown_minutes": 60
+    },
+    {
+      "id": "token_change_alert",
+      "query_id": "token_balance_1",
+      "name": "Token Balance Change",
+      "description": "Token balance has changed significantly",
+      "type": "percent_change",
+      "threshold": 5.0,
+      "urgency": "normal",
+      "cooldown_minutes": 30
+    }
+  ]
+}

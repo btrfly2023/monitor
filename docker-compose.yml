@@ -1,0 +1,12 @@
+version: '3'
+
+services:
+  blockchain-monitor:
+    build: .
+    container_name: blockchain-monitor
+    restart: unless-stopped
+    volumes:
+      - ./config:/app/config
+      - ./logs:/app/logs
+    environment:
+      - TZ=UTC
