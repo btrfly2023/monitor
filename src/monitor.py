@@ -45,6 +45,10 @@ class BlockchainMonitor:
         self.alert_system = AlertSystem(self.config, self.notifiers)
         self.previous_results = {}
 
+        # Other initialization
+        self.last_update_time = 0
+        self.update_interval = 600  # 5 minutes in seconds
+
     def start_log_server(self):
         # Import the web log server
         try:
@@ -124,6 +128,16 @@ class BlockchainMonitor:
                 self.config['notifications']['telegram'] = {}
             self.config['notifications']['telegram']['chat_id'] = os.getenv('TELEGRAM_CHAT_ID')
 
+        if os.getenv('TELEGRAM_BOT_TOKEN_2'):
+            if 'telegram' not in self.config['notifications']:
+                self.config['notifications']['telegram'] = {}
+            self.config['notifications']['telegram']['bot_token_2'] = os.getenv('TELEGRAM_BOT_TOKEN_2')
+
+        if os.getenv('TELEGRAM_CHAT_ID_2'):
+            if 'telegram' not in self.config['notifications']:
+                self.config['notifications']['telegram'] = {}
+            self.config['notifications']['telegram']['chat_id_2'] = os.getenv('TELEGRAM_CHAT_ID_2')
+
         # Proxy settings
         if os.getenv('PROXY_URL'):
             if 'settings' not in self.config:
@@ -139,7 +153,9 @@ class BlockchainMonitor:
             telegram_config = self.config['notifications']['telegram']
             self.notifiers['telegram'] = TelegramNotifier(
                 token=telegram_config.get('bot_token'),
-                chat_id=telegram_config.get('chat_id')
+                chat_id=telegram_config.get('chat_id'),
+                second_token=telegram_config.get('bot_token_2'),
+                second_chat_id=telegram_config.get('chat_id_2')
             )
             logger.info("Telegram notifier configured")
 
@@ -270,6 +286,29 @@ class BlockchainMonitor:
                 continue
 
         logger.info(f"Query batch completed. Success: {successful_queries}, Failed: {failed_queries}")
+        # Check if it's time for a periodic update
+        current_time = time.time()
+        if current_time - self.last_update_time >= self.update_interval:
+            self.send_periodic_update()
+            self.last_update_time = current_time 
+
+    def send_periodic_update(self):
+        """Send periodic blockchain data update via second bot."""
+        try:
+            # Fetch blockchain data
+            query_results = self.previous_results  # Adjust to your actual method
+
+            # Send to second bot
+            telegram = self.notifiers['telegram'] 
+            if query_results and telegram:
+                logger.info(f"Sent periodic update via second bot: {query_results}")
+                telegram.send_blockchain_update(query_results)
+                logger.info("Sent periodic update via second bot")
+            else:
+                logger.warning("No data available for periodic update")
+
+        except Exception as e:
+            logger.error(f"Error sending periodic update: {e}")
 
     def start(self):
         logger.info("Starting blockchain monitor")
