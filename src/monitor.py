@@ -18,6 +18,8 @@ from src.notifiers.telegram import TelegramNotifier
 from src.alerts.alert_system import AlertSystem
 import dotenv
 
+from src.monitor_integration import run_token_monitoring
+
 
 # Set up logging
 log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'logs')
@@ -262,6 +264,28 @@ class BlockchainMonitor:
         logger.error(f"All retry attempts failed for query {query_id}")
         return None
 
+    def check_token_rates(self):
+        """Check token rates and send notifications via Telegram"""
+        try:
+            # Run token monitoring
+            results = run_token_monitoring()
+            
+            # Send summary to Telegram
+            telegram = self.notifiers['telegram'] 
+            # print(results)
+            # print(results["summary"])
+            telegram.send_message_second_bot(results["summary"])
+            
+            # Send notifications for significant changes
+            if results["notifications"]:
+                for notification in results["notifications"]:
+                    self.send_message_second_bot(f"🚨 ALERT: {notification['message']}")
+            
+            return True
+        except Exception as e:
+            logger.error(f"Error checking token rates: {str(e)}")
+            return False
+
     def run_queries(self):
         logger.info("Running scheduled queries")
         successful_queries = 0
@@ -315,10 +339,12 @@ class BlockchainMonitor:
 
         # Run immediately on start
         self.run_queries()
+        self.check_token_rates()
 
         # Schedule regular runs
         interval_minutes = self.config.get('settings', {}).get('interval_minutes', 1)
         schedule.every(interval_minutes).minutes.do(self.run_queries)
+        schedule.every(10 * interval_minutes).minutes.do(self.check_token_rates)
 
         try:
             while True:
