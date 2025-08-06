@@ -344,7 +344,7 @@ class BlockchainMonitor:
         # Schedule regular runs
         interval_minutes = self.config.get('settings', {}).get('interval_minutes', 1)
         schedule.every(interval_minutes).minutes.do(self.run_queries)
-        schedule.every(10 * interval_minutes).minutes.do(self.check_token_rates)
+        schedule.every(20 * interval_minutes).minutes.do(self.check_token_rates)
 
         try:
             while True:
