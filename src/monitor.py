@@ -272,14 +272,14 @@ class BlockchainMonitor:
             
             # Send summary to Telegram
             telegram = self.notifiers['telegram'] 
-            # print(results)
-            # print(results["summary"])
             telegram.send_message_second_bot(results["summary"])
             
             # Send notifications for significant changes
+            # print(results)
             if results["notifications"]:
                 for notification in results["notifications"]:
-                    self.send_message_second_bot(f"🚨 ALERT: {notification['message']}")
+                    # self.send_message_second_bot(f"🚨 ALERT: {notification['message']}")
+                    telegram.send_message(f"🚨 ALERT: {notification['message']}", True)
             
             return True
         except Exception as e:

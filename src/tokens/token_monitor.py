@@ -5,22 +5,13 @@ import time
 
 import logging
 from datetime import datetime
-from .token_swap import get_token_swap_quote, last_rates, split_token_id
+from .token_swap import get_token_swap_quote, last_rates, split_token_id, TOKEN_PAIRS_MONITOR
 
 logger = logging.getLogger(__name__)
 
-# CHANGEME: change below to add/remove pair monitoring
-# Token pairs to monitor
-token_pairs = [
-    ("FXS-1", "cvxFXS-1"),
-    ("WFRAX_fraxtal-252", "cvxFXS_fraxtal-252"),
-    ("FXS-1", "pitchFXS-1"),
-    ("FXS-1", "sdFXS-1"),
-    ("WFRAX_fraxtal-252", "sdFXS_fraxtal-252"),
-]
 amount = 100 # swap 100 tokens
 
-def monitor_token_swaps(threshold_percent=3.0):
+def monitor_token_swaps(threshold_percent=5.0):
     """
     Monitor token swap rates and detect significant changes
     
@@ -36,10 +27,10 @@ def monitor_token_swaps(threshold_percent=3.0):
     results = []
     notifications = []
     
-    for input_token, output_token in token_pairs:
+    for input_token, output_token in TOKEN_PAIRS_MONITOR:
         i_token, i_chainid = split_token_id(input_token, "-")
         o_token, o_chainid = split_token_id(output_token, "-")
-        # pair_key = f"{i_token}_{o_token}"
+        pair_key = f"{i_token}_{o_token}"
         
         ii_token, ii_chainname = split_token_id(i_token, "_")
         oo_token, oo_chainname = split_token_id(o_token, "_")
@@ -96,6 +87,7 @@ def monitor_token_swaps(threshold_percent=3.0):
     for result in results:
         summary += f"{result['pair']}: {result['rate']:.6f}\n"
     
+    # print(results)
     return {
         "results": results, 
         "notifications": notifications,

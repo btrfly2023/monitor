@@ -6,6 +6,8 @@ import logging
 from datetime import datetime
 
 # Common token addresses on Ethereum
+
+# CHANGEME: change below to add/remove pair monitoring
 TOKEN_ADDRESSES = {
     "FXS": "0x3432b6a60d23ca0dfca7761b7ab56459d9c964d0",    # Frax Share
     "cvxFXS": "0xFEEf77d3f69374f66429C91d732A244f074bdf74", 
@@ -14,18 +16,39 @@ TOKEN_ADDRESSES = {
     "WFRAX_fraxtal": "0xFc00000000000000000000000000000000000002",   
     "cvxFXS_fraxtal": "0xEFb4B26FC242478c9008274F9e81db89Fa6adAB9", 
     "sdFXS_fraxtal": "0x1AEe2382e05Dc68BDfC472F1E46d570feCca5814",
+    "frxUSD_fraxtal": "0xFc00000000000000000000000000000000000001",
+    "FXB20251231_fraxtal": "0xacA9A33698cF96413A40A4eB9E87906ff40fC6CA",
+    "FXB20261231_fraxtal": "0x8e9C334afc76106F08E0383907F4Fca9bB10BA3e",
+    "FXB20271231_fraxtal": "0x6c9f4E6089c8890AfEE2bcBA364C2712f88fA818",
+    "FXB20291231_fraxtal": "0xF1e2b576aF4C6a7eE966b14C810b772391e92153",
+    "FXB20551231_fraxtal": "0xc38173D34afaEA88Bc482813B3CD267bc8A1EA83",
 }
+
+# Token pairs to monitor
+TOKEN_PAIRS_MONITOR = [
+    ("FXS-1", "cvxFXS-1"),
+    ("WFRAX_fraxtal-252", "cvxFXS_fraxtal-252"),
+    ("FXS-1", "pitchFXS-1"),
+    ("FXS-1", "sdFXS-1"),
+    ("WFRAX_fraxtal-252", "sdFXS_fraxtal-252"),
+    ("FXB20251231_fraxtal-252", "frxUSD_fraxtal-252"),
+    ("FXB20261231_fraxtal-252", "frxUSD_fraxtal-252"),
+    ("FXB20271231_fraxtal-252", "frxUSD_fraxtal-252"),
+    ("FXB20291231_fraxtal-252", "frxUSD_fraxtal-252"),
+    ("FXB20551231_fraxtal-252", "frxUSD_fraxtal-252"),
+]
 
 # Token decimals
 TOKEN_DECIMALS = {
     "FXS": 18,
-    "cvxFXS": 18,
-    "pitchFXS": 18,
-    "sdFXS": 18,
-    "WFRAX_fraxtal": 18,   
-    "cvxFXS_fraxtal": 18, 
-    "sdFXS_fraxtal": 18,
 }
+
+def get_token_decimals(name):
+    if name in TOKEN_DECIMALS:
+        return TOKEN_DECIMALS[name]
+    else:
+        return 18
+
 
 # Store last rates for comparison
 last_rates = {}
@@ -75,7 +98,7 @@ def get_token_swap_quote(input_token, output_token, amount, chain_id=1, slippage
         raise ValueError(f"Output token {output_token} not found in TOKEN_ADDRESSES")
     
     # Convert amount to token units with proper decimals
-    input_decimals = TOKEN_DECIMALS[input_token]
+    input_decimals = get_token_decimals(input_token) #TOKEN_DECIMALS[input_token]
     input_amount = str(int(amount * (10 ** input_decimals)))
     
     # Odos API endpoint for quote
@@ -110,6 +133,7 @@ def get_token_swap_quote(input_token, output_token, amount, chain_id=1, slippage
             json=quote_request_body
         )
         
+        # print(quote_request_body)
         # Check if request was successful
         if response.status_code == 200:
             quote = response.json()
@@ -120,7 +144,7 @@ def get_token_swap_quote(input_token, output_token, amount, chain_id=1, slippage
             # Safely extract the output amount
             if "outAmounts" in quote and isinstance(quote["outAmounts"], list) and len(quote["outAmounts"]) > 0:
                 output_amount = quote["outAmounts"][0]
-                output_decimals = TOKEN_DECIMALS[output_token]
+                output_decimals = get_token_decimals(output_token) # TOKEN_DECIMALS[output_token]
                 
                 # Convert to human-readable amount
                 output_human_amount = float(output_amount) / (10 ** output_decimals)
@@ -150,82 +174,3 @@ def get_token_swap_quote(input_token, output_token, amount, chain_id=1, slippage
         print("Exception details:")
         return None
 
-
-def monitor_token_swaps(notification_callback=None, threshold_percent=3.0):
-    """
-    Monitor token swap rates and notify on significant changes
-    
-    Parameters:
-    notification_callback (callable): Function to call with notifications
-    threshold_percent (float): Percentage change threshold for notifications
-    
-    Returns:
-    list: List of rate information and notifications
-    """
-    global last_rates
-    
-    # Token pairs to monitor
-    token_pairs = [
-        ("FXS", "cvxFXS"),
-        ("FXS", "pitchFXS"),
-        ("FXS", "sdFXS")
-    ]
-    
-    results = []
-    notifications = []
-    
-    for input_token, output_token in token_pairs:
-        ii_token, ii_chainname = split_token_id(input_token, "_")
-        oo_token, oo_chainname = split_token_id(output_token, "_")
-
-        if ii_chainname is None:
-            pair_key = f"{ii_token}:{oo_token}"
-        else:
-            pair_key = f"{ii_token}_{oo_token} on {ii_chainname}"
-
-        try:
-            # Get current rate
-            quote = get_token_swap_quote(input_token, output_token, 1)
-            if not quote:
-                continue
-                
-            current_rate = quote["exchange_rate"]
-            timestamp = datetime.now().isoformat()
-            
-            # Create result entry
-            result = {
-                "pair": pair_key,
-                "rate": current_rate,
-                "timestamp": timestamp
-            }
-            results.append(result)
-            
-            # Check for significant changes if we have previous rates
-            if pair_key in last_rates:
-                last_rate = last_rates[pair_key]
-                percent_change = abs(current_rate - last_rate) / last_rate * 100
-                
-                if percent_change >= threshold_percent:
-                    change_direction = "increased" if current_rate > last_rate else "decreased"
-                    notification = {
-                        "pair": pair_key,
-                        "previous_rate": last_rate,
-                        "current_rate": current_rate,
-                        "percent_change": percent_change,
-                        "direction": change_direction,
-                        "timestamp": timestamp,
-                        "message": f"{pair_key} exchange rate has {change_direction} by {percent_change:.2f}% (from {last_rate:.6f} to {current_rate:.6f})"
-                    }
-                    notifications.append(notification)
-                    
-                    # Call notification callback if provided
-                    if notification_callback:
-                        notification_callback(notification)
-            
-            # Update last rate
-            last_rates[pair_key] = current_rate
-            
-        except Exception as e:
-            print(f"Error monitoring {pair_key}: {str(e)}")
-    
-    return {"results": results, "notifications": notifications}
