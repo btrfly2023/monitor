@@ -75,6 +75,16 @@
                 "address": "0x3a38e9b0B5cB034De01d5298Fc2Ed2D793C0C36F",
                 "tag": "latest"
             }
+        },
+        {
+            "id": "gas_price",
+            "chain_name": "ethereum",
+            "params": {
+                "chainid": 1,
+                "module": "gastracker",
+                "action": "gasoracle",
+                "tag": "latest"
+            }
         }
     ],
     "alerts": [
