@@ -42,7 +42,6 @@ class BlockchainMonitor:
     def __init__(self, config_path):
         self.config_path = config_path
         self.load_config()
-        self.start_log_server()
         self.setup_notifiers()
         self.alert_system = AlertSystem(self.config, self.notifiers)
         self.previous_results = {}
@@ -50,17 +49,6 @@ class BlockchainMonitor:
         # Other initialization
         self.last_update_time = 0
         self.update_interval = 600  # 5 minutes in seconds
-
-    def start_log_server(self):
-        # Import the web log server
-        try:
-            from src.web_log_server import start_web_server
-            
-            # Start the web log server on port 8080 (or any port you prefer)
-            start_web_server(host='0.0.0.0', port=8080)
-            logging.info("Web log server started at http://0.0.0.0:8080")
-        except Exception as e:
-            logging.error(f"Failed to start web log server: {str(e)}") 
 
     def load_config(self):
         try:
