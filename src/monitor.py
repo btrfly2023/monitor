@@ -10,6 +10,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 import threading
 import logging
+import ast
 
 # Add the project root to the path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -37,6 +38,7 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger('blockchain_monitor')
+
 
 class BlockchainMonitor:
     def __init__(self, config_path):
@@ -203,7 +205,10 @@ class BlockchainMonitor:
                 if data.get('status') == '1':
                     result = data.get('result')
                     # hack, round to 2
-                    if isinstance(result, str):
+                    if isinstance(result, dict):
+                        if "ProposeGasPrice" in result:
+                            result = round(float(result["ProposeGasPrice"]), 2)
+                    else:
                         result = round(float(result)/1e18, 2)
 
                     # Check for changes
