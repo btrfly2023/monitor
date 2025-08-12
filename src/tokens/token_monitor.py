@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 amount = 100 # swap 100 tokens
 
-def monitor_token_swaps(monitor_pairs, threshold_percent=5.0):
+def monitor_token_swaps(monitor_pairs):
     """
     Monitor token swap rates and detect significant changes
     
@@ -32,6 +32,7 @@ def monitor_token_swaps(monitor_pairs, threshold_percent=5.0):
     # for input_token, output_token in TOKEN_PAIRS_MONITOR:
         input_token_address = monitor_pair["from_address"]
         output_token_address = monitor_pair["to_address"]
+        threshold_percent=monitor_pair.get("threshold_percent", 5.0)
 
         input_token = monitor_pair["from_token"]
         output_token = monitor_pair["to_token"]

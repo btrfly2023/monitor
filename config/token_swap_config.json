@@ -6,6 +6,7 @@
             "to_token": "PIPPIN",
             "to_address": "Dfh5DzRgSvvCFDoYc2ciTkMrbDfRKybA4SoFbPmApump",
             "amount": 5000000,
+            "threshold_percent": 15,
             "provider": "jup"
         },
         {
