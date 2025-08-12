@@ -43,15 +43,15 @@ TOKEN_DECIMALS = {
     "FXS": 18,
 }
 
+
+# Store last rates for comparison
+last_rates = {}
+
 def get_token_decimals(name):
     if name in TOKEN_DECIMALS:
         return TOKEN_DECIMALS[name]
     else:
         return 18
-
-
-# Store last rates for comparison
-last_rates = {}
 
 def split_token_id(token_string, splitter = "-"):
     try:
@@ -76,8 +76,72 @@ def split_token_id(token_string, splitter = "-"):
         print(f"Error splitting token ID: {str(e)}")
         return token_string, None
 
+def get_token_swap_quote(input_token, output_token, input_token_address, output_token_address, amount, api="odos", chain_id=1, slippage=0.5):
+    """
+    Get swap rate using specified API
+    
+    Args:
+        from_token: Source token address or mint
+        to_token: Destination token address or mint
+        amount: Amount to swap in base units
+        api: API to use ("odos" or "jup")
+        chain_id: Chain ID (used for Odos, ignored for Jupiter)
+    
+    Returns:
+        Tuple of (output_amount, price_impact)
+    """
+    if api.lower() == "odos":
+        return get_odos_swap_quote(input_token, output_token, input_token_address, output_token_address, amount, chain_id = chain_id)
+    elif api.lower() == "jup":
+        return get_jup_swap_quote(input_token, output_token, input_token_address, output_token_address, amount, chain_id = chain_id)
+    else:
+        logger.error(f"Unsupported API: {api}")
+        return None, None
 
-def get_token_swap_quote(input_token, output_token, amount, chain_id=1, slippage=0.5):
+def get_jup_swap_quote(input_token, output_token, input_token_address, output_token_address, amount, chain_id=1, slippage=0.5):
+    """
+    Get swap rate from Jupiter (Jup) API
+    
+    Args:
+        from_token: Source token address or mint
+        to_token: Destination token address or mint
+        amount: Amount to swap in base units
+        chain_id: Chain ID (ignored for Jupiter as it's Solana-specific)
+    
+    Returns:
+        Tuple of (output_amount, price_impact)
+    """
+    # try:
+    # Jupiter API endpoint for quote
+    url = "https://lite-api.jup.ag/swap/v1/quote"
+    
+    # Prepare parameters
+    params = {
+        "inputMint": input_token_address,
+        "outputMint": output_token_address,
+        "amount": amount * (10 ** 6),
+        "slippageBps": int(10000 * slippage * 0.01)  # 0.5% slippage
+    }
+    
+    # Make request to Jupiter API
+    response = requests.get(url, params=params)
+
+    output_human_amount = parse_response(response)
+ 
+    result = {
+        "input_token": input_token,
+        "input_amount": amount,
+        "output_token": output_token,
+        "output_amount": output_human_amount,
+        "exchange_rate": output_human_amount / amount
+    }
+    if output_human_amount is not None:
+        return result
+    else:
+        return None
+
+
+def get_odos_swap_quote(input_token, output_token, input_token_address, output_token_address, amount, chain_id=1, slippage=0.5):
     """
     Get a quote for swapping tokens using Odos API
     
@@ -91,14 +155,14 @@ def get_token_swap_quote(input_token, output_token, amount, chain_id=1, slippage
     Returns:
     dict: Quote information or None if error
     """
-    # Validate tokens
-    if input_token not in TOKEN_ADDRESSES:
-        raise ValueError(f"Input token {input_token} not found in TOKEN_ADDRESSES")
-    if output_token not in TOKEN_ADDRESSES:
-        raise ValueError(f"Output token {output_token} not found in TOKEN_ADDRESSES")
+    # # Validate tokens
+    # if input_token not in TOKEN_ADDRESSES:
+    #     raise ValueError(f"Input token {input_token} not found in TOKEN_ADDRESSES")
+    # if output_token not in TOKEN_ADDRESSES:
+    #     raise ValueError(f"Output token {output_token} not found in TOKEN_ADDRESSES")
     
     # Convert amount to token units with proper decimals
-    input_decimals = get_token_decimals(input_token) #TOKEN_DECIMALS[input_token]
+    input_decimals = get_token_decimals(input_token)
     input_amount = str(int(amount * (10 ** input_decimals)))
     
     # Odos API endpoint for quote
@@ -109,13 +173,13 @@ def get_token_swap_quote(input_token, output_token, amount, chain_id=1, slippage
         "chainId": chain_id,
         "inputTokens": [
             {
-                "tokenAddress": TOKEN_ADDRESSES[input_token],
+                "tokenAddress": input_token_address,
                 "amount": input_amount,
             }
         ],
         "outputTokens": [
             {
-                "tokenAddress": TOKEN_ADDRESSES[output_token],
+                "tokenAddress": output_token_address,
                 "proportion": 1
             }
         ],
@@ -125,44 +189,50 @@ def get_token_swap_quote(input_token, output_token, amount, chain_id=1, slippage
         "disableRFQs": True,
         "compact": True,
     }
+    response = requests.post(
+        quote_url,
+        headers={"Content-Type": "application/json"},
+        json=quote_request_body
+    )
+    output_human_amount = parse_response(response)
+ 
+    result = {
+        "input_token": input_token,
+        "input_amount": amount,
+        "output_token": output_token,
+        "output_amount": output_human_amount,
+        "exchange_rate": output_human_amount / amount,
+        # "gas_estimate_usd": quote.get("gasEstimateUSD"),
+        # "path_id": quote.get("pathId")
+    }
+    if output_human_amount is not None:
+        return result
+    else:
+        return None
     
+def parse_response(response):
     try:
-        response = requests.post(
-            quote_url,
-            headers={"Content-Type": "application/json"},
-            json=quote_request_body
-        )
-        
-        # print(quote_request_body)
+       
         # Check if request was successful
         if response.status_code == 200:
             quote = response.json()
             
             # Debug the response structure
-            # print(f"API Response: {quote}")
             
             # Safely extract the output amount
-            if "outAmounts" in quote and isinstance(quote["outAmounts"], list) and len(quote["outAmounts"]) > 0:
-                output_amount = quote["outAmounts"][0]
-                output_decimals = get_token_decimals(output_token) # TOKEN_DECIMALS[output_token]
+            if "outAmounts" in quote or "outAmount" in quote:
+                if "outAmounts" in quote and isinstance(quote["outAmounts"], list) and len(quote["outAmounts"]) > 0:
+                    output_amount = quote["outAmounts"][0]
+                    # output_decimals = get_token_decimals(output_token) 
+                    
+                    # Convert to human-readable amount
+                    output_human_amount = float(output_amount) / (10 ** 18)
+                else:
+                    output_human_amount = float(quote["outAmount"]) / (10 ** 6)
                 
-                # Convert to human-readable amount
-                output_human_amount = float(output_amount) / (10 ** output_decimals)
-                
-                # Create result dictionary
-                result = {
-                    "input_token": input_token,
-                    "input_amount": amount,
-                    "output_token": output_token,
-                    "output_amount": output_human_amount,
-                    "exchange_rate": output_human_amount / amount,
-                    "gas_estimate_usd": quote.get("gasEstimateUSD"),
-                    "path_id": quote.get("pathId")
-                }
-                
-                return result
+                return output_human_amount
             else:
-                print(f"Unexpected response format: 'outAmounts' not found or not a list")
+                print(f"Unexpected response format: 'outAmounts' or 'outAmount' not found or not a list")
                 print(f"Response: {quote}")
                 return None
         else:

@@ -5,13 +5,13 @@ import time
 
 import logging
 from datetime import datetime
-from .token_swap import get_token_swap_quote, last_rates, split_token_id, TOKEN_PAIRS_MONITOR
+from .token_swap import get_token_swap_quote, last_rates, split_token_id 
 
 logger = logging.getLogger(__name__)
 
 amount = 100 # swap 100 tokens
 
-def monitor_token_swaps(threshold_percent=5.0):
+def monitor_token_swaps(monitor_pairs, threshold_percent=5.0):
     """
     Monitor token swap rates and detect significant changes
     
@@ -27,7 +27,14 @@ def monitor_token_swaps(threshold_percent=5.0):
     results = []
     notifications = []
     
-    for input_token, output_token in TOKEN_PAIRS_MONITOR:
+    for monitor_pair in monitor_pairs:
+
+    # for input_token, output_token in TOKEN_PAIRS_MONITOR:
+        input_token_address = monitor_pair["from_address"]
+        output_token_address = monitor_pair["to_address"]
+
+        input_token = monitor_pair["from_token"]
+        output_token = monitor_pair["to_token"]
         i_token, i_chainid = split_token_id(input_token, "-")
         o_token, o_chainid = split_token_id(output_token, "-")
         pair_key = f"{i_token}_{o_token}"
@@ -42,7 +49,7 @@ def monitor_token_swaps(threshold_percent=5.0):
 
         try:
             # Get current rate
-            quote = get_token_swap_quote(i_token, o_token, amount, chain_id = i_chainid)
+            quote = get_token_swap_quote(input_token, output_token, input_token_address, output_token_address, amount, api=monitor_pair["provider"], chain_id = i_chainid)
             if not quote:
                 logger.warning(f"Failed to get quote for {pair_key}")
                 continue

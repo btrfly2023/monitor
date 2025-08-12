@@ -19,7 +19,7 @@ from src.notifiers.telegram import TelegramNotifier
 from src.alerts.alert_system import AlertSystem
 import dotenv
 
-from src.monitor_integration import run_token_monitoring
+from src.tokens.token_monitor import monitor_token_swaps
 
 
 # Set up logging
@@ -41,8 +41,9 @@ logger = logging.getLogger('blockchain_monitor')
 
 
 class BlockchainMonitor:
-    def __init__(self, config_path):
+    def __init__(self, config_path, swap_config_path):
         self.config_path = config_path
+        self.swap_config_path = swap_config_path
         self.load_config()
         self.setup_notifiers()
         self.alert_system = AlertSystem(self.config, self.notifiers)
@@ -65,6 +66,12 @@ class BlockchainMonitor:
                 self.config = json.load(f)
             logger.info(f"Configuration loaded from {self.config_path}")
 
+            # Load swap configuration
+            with open(self.swap_config_path, 'r') as f:
+                self.swap_config = json.load(f)
+            logger.info(f"Swap configuration loaded from {self.swap_config_path}")
+
+ 
             # Load secure keys if available
             secure_dir = os.path.join(os.path.dirname(self.config_path), 'secure')
             secure_keys_path = os.path.join(secure_dir, 'keys.json')
@@ -261,7 +268,7 @@ class BlockchainMonitor:
         """Check token rates and send notifications via Telegram"""
         try:
             # Run token monitoring
-            results = run_token_monitoring()
+            results = monitor_token_swaps(self.swap_config["monitor_pairs"])
             
             # Send summary to Telegram
             telegram = self.notifiers['telegram'] 
@@ -356,7 +363,13 @@ if __name__ == "__main__":
         'blockchain_config.json'
     )
 
-    monitor = BlockchainMonitor(config_path)
+    swap_config_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        'config',
+        'token_swap_config.json'
+    )
+
+    monitor = BlockchainMonitor(config_path, swap_config_path)
     monitor.start()
 
 
