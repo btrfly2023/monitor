@@ -9,7 +9,7 @@ from .token_swap import get_token_swap_quote, last_rates, split_token_id
 
 logger = logging.getLogger(__name__)
 
-amount = 100 # swap 100 tokens
+# amount = 100 # swap 100 tokens
 
 def monitor_token_swaps(monitor_pairs):
     """
@@ -33,6 +33,7 @@ def monitor_token_swaps(monitor_pairs):
         input_token_address = monitor_pair["from_address"]
         output_token_address = monitor_pair["to_address"]
         threshold_percent=monitor_pair.get("threshold_percent", 5.0)
+        amount=monitor_pair.get("amount", 100)
 
         input_token = monitor_pair["from_token"]
         output_token = monitor_pair["to_token"]
