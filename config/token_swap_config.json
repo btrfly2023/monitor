@@ -1,15 +1,6 @@
 {
     "monitor_pairs": [
         {
-            "from_token": "AVB",
-            "from_address": "6d5zHW5B8RkGKd51Lpb9RqFQSqDudr9GJgZ1SgQZpump",
-            "to_token": "PIPPIN",
-            "to_address": "Dfh5DzRgSvvCFDoYc2ciTkMrbDfRKybA4SoFbPmApump",
-            "amount": 5000000,
-            "threshold_percent": 15,
-            "provider": "jup"
-        },
-        {
             "from_token": "WFRAX-1",
             "from_address": "0x04ACaF8D2865c0714F79da09645C13FD2888977f",
             "to_token": "cvxFXS-1",
