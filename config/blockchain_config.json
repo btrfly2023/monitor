@@ -17,14 +17,14 @@
     },
     "queries": [
         {
-            "id": "ybgt_BGT",
+            "id": "wbera_count",
             "chain_name": "ethereum",
             "params": {
                 "chainid": 80094,
                 "module": "account",
                 "action": "tokenbalance",
-                "contractaddress": "0x656b95e550c07a9ffe548bd4085c72418ceb1dba",
-                "address": "0x37d1e4594ed04818b68af5396bc7388c26f17e4a",
+                "contractaddress": "0x6969696969696969696969696969696969696969",
+                "address": "0xd8698693d8ca90238176ABf896A59B58DE6dC1b8",
                 "tag": "latest"
             }
         },
@@ -102,12 +102,12 @@
     "alerts": [
         {
             "id": "bgt_balance_alert",
-            "query_id": "ybgt_BGT",
-            "name": "bgt number",
-            "description": "bgt number changes!",
+            "query_id": "wbera_count",
+            "name": "wbera count",
+            "description": "wbera count changes!",
             "type": "threshold",
             "operator": ">",
-            "threshold": "15",
+            "threshold": "0.01",
             "urgency": "high",
             "cooldown_minutes": 60
         },
