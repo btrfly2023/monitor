@@ -29,6 +29,19 @@
             }
         },
         {
+            "id": "ybgt_count",
+            "chain_name": "ethereum",
+            "params": {
+                "chainid": 80094,
+                "module": "account",
+                "action": "tokenbalance",
+                "contractaddress": "0x656b95e550c07a9ffe548bd4085c72418ceb1dba",
+                "address": "0x92afc3ee9F2975deDa06b3c50B2B6eA0856d3353",
+                "tag": "latest"
+            }
+        },
+
+        {
             "id": "c2tp_fxs_balance",
             "chain_name": "ethereum",
             "params": {
@@ -108,6 +121,17 @@
             "type": "threshold",
             "operator": ">",
             "threshold": "0.01",
+            "urgency": "high",
+            "cooldown_minutes": 60
+        },
+        {
+            "id": "bgt_balance_alert",
+            "query_id": "ybgt_count",
+            "name": "bgt number",
+            "description": "bgt number changes!",
+            "type": "threshold",
+            "operator": ">",
+            "threshold": "100",
             "urgency": "high",
             "cooldown_minutes": 60
         },
