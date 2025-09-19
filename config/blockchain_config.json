@@ -35,7 +35,7 @@
                 "chainid": 80094,
                 "module": "account",
                 "action": "tokenbalance",
-                "contractaddress": "0x656b95e550c07a9ffe548bd4085c72418ceb1dba",
+                "contractaddress": "0x7e768f47dfDD5DAe874Aac233f1Bc5817137E453",
                 "address": "0x92afc3ee9F2975deDa06b3c50B2B6eA0856d3353",
                 "tag": "latest"
             }
