@@ -114,7 +114,7 @@
     ],
     "alerts": [
         {
-            "id": "bgt_balance_alert",
+            "id": "bera_balance_alert",
             "query_id": "wbera_count",
             "name": "wbera count",
             "description": "wbera count changes!",
