@@ -17,6 +17,31 @@
     },
     "queries": [
         {
+            "id": "wbera_count",
+            "chain_name": "ethereum",
+            "params": {
+                "chainid": 80094,
+                "module": "account",
+                "action": "tokenbalance",
+                "contractaddress": "0x6969696969696969696969696969696969696969",
+                "address": "0xd8698693d8ca90238176ABf896A59B58DE6dC1b8",
+                "tag": "latest"
+            }
+        },
+        {
+            "id": "ybgt_count",
+            "chain_name": "ethereum",
+            "params": {
+                "chainid": 80094,
+                "module": "account",
+                "action": "tokenbalance",
+                "contractaddress": "0x7e768f47dfDD5DAe874Aac233f1Bc5817137E453",
+                "address": "0x92afc3ee9F2975deDa06b3c50B2B6eA0856d3353",
+                "tag": "latest"
+            }
+        },
+
+        {
             "id": "c2tp_fxs_balance",
             "chain_name": "ethereum",
             "params": {
@@ -88,6 +113,28 @@
         }
     ],
     "alerts": [
+        {
+            "id": "bera_balance_alert",
+            "query_id": "wbera_count",
+            "name": "wbera count",
+            "description": "wbera count changes!",
+            "type": "threshold",
+            "operator": ">",
+            "threshold": "0.01",
+            "urgency": "high",
+            "cooldown_minutes": 0
+        },
+        {
+            "id": "bgt_balance_alert",
+            "query_id": "ybgt_count",
+            "name": "bgt number",
+            "description": "bgt number changes!",
+            "type": "threshold",
+            "operator": ">",
+            "threshold": "100",
+            "urgency": "high",
+            "cooldown_minutes": 0
+        },
         {
             "id": "c2tp_fxs_balance_alert",
             "query_id": "c2tp_fxs_balance",
