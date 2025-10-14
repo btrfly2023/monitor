@@ -25,22 +25,6 @@
             "provider": "odos"
         },
         {
-            "from_token": "WFRAX-1",
-            "from_address": "0x04ACaF8D2865c0714F79da09645C13FD2888977f",
-            "to_token": "sdFXS-1",
-            "to_address": "0x402F878BDd1f5C66FdAF0fabaBcF74741B68ac36",
-            "amount": 100,
-            "provider": "odos"
-        },
-        {
-            "from_token": "WFRAX_fraxtal-252",
-            "from_address": "0xFc00000000000000000000000000000000000002",
-            "to_token": "sdFXS_fraxtal-252",
-            "to_address": "0x1AEe2382e05Dc68BDfC472F1E46d570feCca5814",
-            "amount": 100,
-            "provider": "odos"
-        },
-        {
             "from_token": "FXB20251231_fraxtal-252",
             "from_address": "0xacA9A33698cF96413A40A4eB9E87906ff40fC6CA",
             "to_token": "frxUSD_fraxtal-252",
