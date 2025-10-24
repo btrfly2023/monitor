@@ -15,6 +15,15 @@
         "interval_minutes": 0.5,
         "log_retention_days": 7
     },
+    "hot_wallet_monitor": {
+        "enabled": true,
+        "websocket_rpc_url": "ENV",
+        "token_thresholds": {
+            "0xCAcd6fd266aF91b8AeD52aCCc382b4e165586E29" : 500000
+        },
+        "alert_windows": [60, 300],
+        "print_every_n_blocks": 10
+    },
     "queries": [
         {
             "id": "c2tp_fxs_balance",

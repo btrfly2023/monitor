@@ -9,7 +9,7 @@ from datetime import datetime
 import logging
 from logging.handlers import RotatingFileHandler
 import threading
-import logging
+import asyncio
 import ast
 
 # Add the project root to the path
@@ -18,9 +18,15 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from src.notifiers.telegram import TelegramNotifier
 from src.alerts.alert_system import AlertSystem
 import dotenv
-
 from src.tokens.token_monitor import monitor_token_swaps
 
+# Import hot wallet monitor
+try:
+    from src.monitors.hot_wallet_monitor import HotWalletMonitor
+    HOT_WALLET_AVAILABLE = True
+except ImportError:
+    HOT_WALLET_AVAILABLE = False
+    logging.warning("Hot wallet monitor not available (missing dependencies)")
 
 # Set up logging
 log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'logs')
@@ -48,10 +54,15 @@ class BlockchainMonitor:
         self.setup_notifiers()
         self.alert_system = AlertSystem(self.config, self.notifiers)
         self.previous_results = {}
-
+        
         # Other initialization
         self.last_update_time = 0
         self.update_interval = 600  # 5 minutes in seconds
+        
+        # Hot wallet monitor
+        self.hot_wallet_monitor = None
+        self.hot_wallet_thread = None
+        self.hot_wallet_loop = None
 
     def load_config(self):
         try:
@@ -71,16 +82,14 @@ class BlockchainMonitor:
                 self.swap_config = json.load(f)
             logger.info(f"Swap configuration loaded from {self.swap_config_path}")
 
- 
             # Load secure keys if available
             secure_dir = os.path.join(os.path.dirname(self.config_path), 'secure')
             secure_keys_path = os.path.join(secure_dir, 'keys.json')
-
             if os.path.exists(secure_keys_path):
                 with open(secure_keys_path, 'r') as f:
                     secure_keys = json.load(f)
                 logger.info(f"Secure keys loaded from {secure_keys_path}")
-
+                
                 # Merge secure keys into config
                 if 'api_keys' in secure_keys:
                     self.config['api_keys'] = secure_keys['api_keys']
@@ -88,10 +97,10 @@ class BlockchainMonitor:
                     self.config['notifications'] = secure_keys['notifications']
             else:
                 logger.info("No secure keys file found, checking environment variables")
-
+            
             # Override with environment variables if available
             self._load_from_env()
-
+            
         except Exception as e:
             logger.error(f"Failed to load configuration: {e}")
             sys.exit(1)
@@ -101,7 +110,7 @@ class BlockchainMonitor:
         # API Keys
         if 'api_keys' not in self.config:
             self.config['api_keys'] = {}
-
+        
         if os.getenv('ETHERSCAN_API_KEY'):
             self.config['api_keys']['ethereum'] = os.getenv('ETHERSCAN_API_KEY')
         if os.getenv('POLYGONSCAN_API_KEY'):
@@ -116,25 +125,14 @@ class BlockchainMonitor:
             self.config['notifications'] = {}
         if 'telegram' not in self.config['notifications']:
             self.config['notifications']['telegram'] = {}
-
+        
         if os.getenv('TELEGRAM_BOT_TOKEN'):
-            if 'telegram' not in self.config['notifications']:
-                self.config['notifications']['telegram'] = {}
             self.config['notifications']['telegram']['bot_token'] = os.getenv('TELEGRAM_BOT_TOKEN')
-
         if os.getenv('TELEGRAM_CHAT_ID'):
-            if 'telegram' not in self.config['notifications']:
-                self.config['notifications']['telegram'] = {}
             self.config['notifications']['telegram']['chat_id'] = os.getenv('TELEGRAM_CHAT_ID')
-
         if os.getenv('TELEGRAM_BOT_TOKEN_2'):
-            if 'telegram' not in self.config['notifications']:
-                self.config['notifications']['telegram'] = {}
             self.config['notifications']['telegram']['bot_token_2'] = os.getenv('TELEGRAM_BOT_TOKEN_2')
-
         if os.getenv('TELEGRAM_CHAT_ID_2'):
-            if 'telegram' not in self.config['notifications']:
-                self.config['notifications']['telegram'] = {}
             self.config['notifications']['telegram']['chat_id_2'] = os.getenv('TELEGRAM_CHAT_ID_2')
 
         # Proxy settings
@@ -146,7 +144,7 @@ class BlockchainMonitor:
 
     def setup_notifiers(self):
         self.notifiers = {}
-
+        
         # Set up Telegram notifier if configured
         if 'telegram' in self.config.get('notifications', {}):
             telegram_config = self.config['notifications']['telegram']
@@ -158,12 +156,21 @@ class BlockchainMonitor:
             )
             logger.info("Telegram notifier configured")
 
+    def send_telegram_notification_sync(self, message):
+        """Synchronous wrapper for sending Telegram notifications"""
+        try:
+            telegram = self.notifiers.get('telegram')
+            if telegram:
+                telegram.send_message(message, urgent=True)
+                logger.info("Hot wallet notification sent via Telegram")
+        except Exception as e:
+            logger.error(f"Failed to send hot wallet notification: {e}")
+
     def get_chain_api_url(self, chain_name):
         chain_configs = {
             'ethereum': 'https://api.etherscan.io/v2/api',
             'polygon': 'https://api.polygonscan.com/api',
             'bsc': 'https://api.bscscan.com/api',
-            # Add more chains as needed
         }
         return chain_configs.get(chain_name, 'https://api.etherscan.io/api')
 
@@ -176,7 +183,7 @@ class BlockchainMonitor:
         chain_name = query.get('chain_name', 'ethereum')
         api_url = self.get_chain_api_url(chain_name)
         api_key = self.get_api_key(chain_name)
-
+        
         params = query.get('params', {}).copy()
         params['apikey'] = api_key
 
@@ -194,73 +201,68 @@ class BlockchainMonitor:
         # Add exponential backoff for retries
         max_retries = self.config.get('settings', {}).get('max_retries', 3)
         retry_delay = self.config.get('settings', {}).get('retry_delay_seconds', 2)
-
+        
         for retry in range(max_retries):
             try:
                 logger.debug(f"Executing query {query_id} on {chain_name} (attempt {retry+1}/{max_retries})")
-
-                # Try without proxy first if we're having proxy issues
+                
                 if retry > 0 and proxies:
                     logger.debug(f"Retry attempt {retry+1}: trying without proxy")
                     response = requests.get(api_url, params=params, timeout=30)
                 else:
                     response = requests.get(api_url, params=params, proxies=proxies, timeout=30)
-
+                
                 response.raise_for_status()
                 data = response.json()
-
+                
                 if data.get('status') == '1':
                     result = data.get('result')
+                    
                     # hack, round to 2
                     if isinstance(result, dict):
                         if "ProposeGasPrice" in result:
                             result = round(float(result["ProposeGasPrice"]), 2)
                     else:
                         result = round(float(result)/1e18, 2)
-
+                    
                     # Check for changes
                     previous = self.previous_results.get(query_id)
                     logger.info(f"~~~query {query_id}: {result}")
+                    
                     if previous is not None and previous != result:
                         logger.info(f"Change detected for query {query_id}")
-
                         # Process alerts
                         self.alert_system.process_alert(query_id, result, previous)
-
+                    
                     # Store the new result
                     self.previous_results[query_id] = result
                     return result
                 else:
                     error_msg = data.get('message', 'Unknown API error')
                     logger.error(f"API error for query {query_id}: {error_msg}")
-
-                    # If we're being rate limited, wait longer before retry
+                    
                     if "rate limit" in error_msg.lower():
                         wait_time = retry_delay * (2 ** retry)
                         logger.warning(f"Rate limit hit, waiting {wait_time} seconds before retry")
                         time.sleep(wait_time)
                         continue
-
                     return None
-
+                    
             except requests.exceptions.ProxyError as e:
                 logger.error(f"Proxy error for query {query_id}: {e}")
-                # Try again without proxy on next iteration
                 proxies = None
                 time.sleep(retry_delay)
                 continue
-
             except requests.exceptions.RequestException as e:
                 logger.error(f"Request failed for query {query_id}: {e}")
                 wait_time = retry_delay * (2 ** retry)
                 logger.debug(f"Waiting {wait_time} seconds before retry")
                 time.sleep(wait_time)
                 continue
-
             except Exception as e:
                 logger.error(f"Unexpected error for query {query_id}: {e}")
                 return None
-
+        
         logger.error(f"All retry attempts failed for query {query_id}")
         return None
 
@@ -271,14 +273,12 @@ class BlockchainMonitor:
             results = monitor_token_swaps(self.swap_config["monitor_pairs"])
             
             # Send summary to Telegram
-            telegram = self.notifiers['telegram'] 
+            telegram = self.notifiers['telegram']
             telegram.send_message_second_bot(results["summary"])
             
             # Send notifications for significant changes
-            # print(results)
             if results["notifications"]:
                 for notification in results["notifications"]:
-                    # self.send_message_second_bot(f"🚨 ALERT: {notification['message']}")
                     telegram.send_message(f"🚨 ALERT: {notification['message']}", True)
             
             return True
@@ -290,71 +290,156 @@ class BlockchainMonitor:
         logger.info("Running scheduled queries")
         successful_queries = 0
         failed_queries = 0
-
+        
         for query in self.config.get('queries', []):
             query_id = query.get('id', 'unknown')
             try:
                 logger.debug(f"Starting query: {query_id}")
                 result = self.execute_query(query)
-
+                
                 if result is not None:
                     successful_queries += 1
                     logger.debug(f"Query {query_id} completed successfully")
                 else:
                     failed_queries += 1
                     logger.warning(f"Query {query_id} returned no results")
+                    
             except Exception as e:
                 failed_queries += 1
                 logger.error(f"Unhandled exception in query {query_id}: {e}", exc_info=True)
-                # Continue with next query despite this error
                 continue
-
+        
         logger.info(f"Query batch completed. Success: {successful_queries}, Failed: {failed_queries}")
+        
         # Check if it's time for a periodic update
         current_time = time.time()
         if current_time - self.last_update_time >= self.update_interval:
             self.send_periodic_update()
-            self.last_update_time = current_time 
+            self.last_update_time = current_time
 
     def send_periodic_update(self):
         """Send periodic blockchain data update via second bot."""
         try:
-            # Fetch blockchain data
-            query_results = self.previous_results  # Adjust to your actual method
-
-            # Send to second bot
-            telegram = self.notifiers['telegram'] 
+            query_results = self.previous_results
+            telegram = self.notifiers['telegram']
+            
             if query_results and telegram:
                 logger.info(f"Sent periodic update via second bot: {query_results}")
                 telegram.send_blockchain_update(query_results)
                 logger.info("Sent periodic update via second bot")
             else:
                 logger.warning("No data available for periodic update")
-
         except Exception as e:
             logger.error(f"Error sending periodic update: {e}")
 
+    def start_hot_wallet_monitor_thread(self):
+        """Start hot wallet monitor in a separate thread with its own event loop"""
+        if not HOT_WALLET_AVAILABLE:
+            logger.warning("Hot wallet monitor dependencies not installed, skipping")
+            return
+        
+        hw_config = self.config.get('hot_wallet_monitor', {})
+        
+        if not hw_config.get('enabled', False):
+            logger.info("Hot wallet monitor is disabled in config")
+            return
+        
+        # Get WebSocket URL
+        ws_url = os.getenv('WEBSOCKET_RPC_URL') or hw_config.get('websocket_rpc_url')
+        
+        if not ws_url or 'WEBSOCKET_API_KEY' in ws_url:
+            logger.warning("Hot wallet monitor: WebSocket URL not configured properly")
+            return
+        
+        # Get token thresholds
+        token_thresholds = hw_config.get('token_thresholds', {})
+        token_thresholds = {k.lower(): float(v) for k, v in token_thresholds.items()}
+        
+        if not token_thresholds:
+            logger.warning("Hot wallet monitor: No token thresholds configured")
+            return
+        
+        logger.info(f"Starting hot wallet monitor with {len(token_thresholds)} tokens")
+        
+        def run_async_monitor():
+            """Run the async monitor in a new event loop"""
+            # Create a new event loop for this thread
+            self.hot_wallet_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self.hot_wallet_loop)
+            
+            try:
+                # Create notification callback that works with the sync telegram notifier
+                def notification_callback_sync(message):
+                    """Sync wrapper for notification callback"""
+                    self.send_telegram_notification_sync(message)
+                    return asyncio.sleep(0)  # Return a coroutine
+                
+                # Initialize monitor
+                self.hot_wallet_monitor = HotWalletMonitor(
+                    ws_url=ws_url,
+                    token_thresholds=token_thresholds,
+                    notification_callback=notification_callback_sync,
+                    alert_cooldown_minutes=60  # Configurable cooldown in minutes
+                )
+                
+                # Run the monitor
+                self.hot_wallet_loop.run_until_complete(self.hot_wallet_monitor.start())
+            except Exception as e:
+                logger.error(f"Hot wallet monitor error: {e}", exc_info=True)
+            finally:
+                self.hot_wallet_loop.close()
+        
+        # Start in a daemon thread so it doesn't prevent shutdown
+        self.hot_wallet_thread = threading.Thread(target=run_async_monitor, daemon=True)
+        self.hot_wallet_thread.start()
+        logger.info("Hot wallet monitor thread started")
+
     def start(self):
         logger.info("Starting blockchain monitor")
-
+        
+        # Start hot wallet monitor in separate thread
+        self.start_hot_wallet_monitor_thread()
+        
         # Run immediately on start
         self.run_queries()
         self.check_token_rates()
-
+        
         # Schedule regular runs
         interval_minutes = self.config.get('settings', {}).get('interval_minutes', 1)
         schedule.every(interval_minutes).minutes.do(self.run_queries)
         schedule.every(20 * interval_minutes).minutes.do(self.check_token_rates)
-
+        
         try:
             while True:
                 schedule.run_pending()
                 time.sleep(1)
         except KeyboardInterrupt:
             logger.info("Monitor stopped by user")
+            self.stop()
         except Exception as e:
             logger.error(f"Monitor stopped due to error: {e}")
+            self.stop()
             raise
+
+    def stop(self):
+        """Clean shutdown of all monitors"""
+        logger.info("Shutting down monitors...")
+        
+        # Stop hot wallet monitor
+        if self.hot_wallet_monitor and self.hot_wallet_loop:
+            try:
+                # Schedule the stop coroutine in the monitor's event loop
+                asyncio.run_coroutine_threadsafe(
+                    self.hot_wallet_monitor.stop(), 
+                    self.hot_wallet_loop
+                )
+                # Give it a moment to clean up
+                time.sleep(2)
+            except Exception as e:
+                logger.error(f"Error stopping hot wallet monitor: {e}")
+        
+        logger.info("Shutdown complete")
+
 
 if __name__ == "__main__":
     config_path = os.path.join(
@@ -362,14 +447,12 @@ if __name__ == "__main__":
         'config',
         'blockchain_config.json'
     )
-
+    
     swap_config_path = os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
         'config',
         'token_swap_config.json'
     )
-
+    
     monitor = BlockchainMonitor(config_path, swap_config_path)
     monitor.start()
-
-
