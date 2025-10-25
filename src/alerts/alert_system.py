@@ -175,9 +175,11 @@ class AlertSystem:
         if description:
             message += f"{description}\n\n"
 
+        change_value = int(current_value) - int(previous_value)
         message += f"Query: `{query_id}`\n"
         message += f"Previous value: `{previous_value}`\n"
         message += f"Current value: `{current_value}`\n"
+        message += f"Change value: `{change_value}`\n"
         message += f"Time: `{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}`"
 
         # Send notifications
