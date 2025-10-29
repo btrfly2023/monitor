@@ -33,6 +33,14 @@
             "provider": "odos"
         },
         {
+            "from_token": "FXS-1",
+            "from_address": "0x3432B6A60D23Ca0dFCa7761B7ab56459D9C964D0",
+            "to_token": "frxUSD",
+            "to_address": "0xCAcd6fd266aF91b8AeD52aCCc382b4e165586E29",
+            "amount": 1000,
+            "provider": "odos"
+        },
+        {
             "from_token": "WFRAX-1",
             "from_address": "0x04ACaF8D2865c0714F79da09645C13FD2888977f",
             "to_token": "pitchFXS-1",
