@@ -17,18 +17,18 @@
             "provider": "odos"
         },
         {
-            "from_token": "WFRAX_fraxtal-252",
-            "from_address": "0xFc00000000000000000000000000000000000002",
-            "to_token": "frxUSD",
-            "to_address": "0xFc00000000000000000000000000000000000001",
-            "amount": 1000,
-            "provider": "odos"
-        },
-        {
             "from_token": "WFRAX-1",
             "from_address": "0x04ACaF8D2865c0714F79da09645C13FD2888977f",
             "to_token": "frxUSD",
             "to_address": "0xCAcd6fd266aF91b8AeD52aCCc382b4e165586E29",
+            "amount": 1000,
+            "provider": "odos"
+        },
+        {
+            "from_token": "WFRAX_fraxtal-252",
+            "from_address": "0xFc00000000000000000000000000000000000002",
+            "to_token": "frxUSD",
+            "to_address": "0xFc00000000000000000000000000000000000001",
             "amount": 1000,
             "provider": "odos"
         },
