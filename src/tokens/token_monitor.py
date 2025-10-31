@@ -95,6 +95,7 @@ def monitor_token_swaps(monitor_pairs):
     summary = "Current Token Rates:\n"
     for result in results:
         summary += f"{result['pair']}: {result['rate']:.6f}\n"
+    logger.info(summary)
     
     # print(results)
     return {
