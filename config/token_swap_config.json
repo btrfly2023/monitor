@@ -37,7 +37,7 @@
             "from_address": "0x3432B6A60D23Ca0dFCa7761B7ab56459D9C964D0",
             "to_token": "WFRAX-1",
             "to_address": "0x04ACaF8D2865c0714F79da09645C13FD2888977f",
-            "amount": 1000,
+            "amount": 10000,
             "provider": "odos"
         },
         {
