@@ -403,18 +403,28 @@ class BlockchainMonitor:
         """
         Check FXS/WFRAX arbitrage opportunities every few minutes.
 
-        Uses:
-          - Binance: FXSUSDT
-          - ETH DEX: FXS <-> frxUSD
-          - Fraxtal DEX: WFRAX_fraxtal <-> frxUSD_fraxtal
+        Two levels:
+          - If profit > arb_alert_threshold: send urgent alert.
+          - If arb_info_threshold < profit <= arb_alert_threshold: send info-only message.
         """
         try:
-            # Parameters – adjust as you like or read from config
+            # Parameters – you can move these to config if you like
             binance_symbol = "FXSUSDT"
             qty_fxs = 2000.0
             qty_wfrax = 2000.0
-            min_profit_alert = 15.0   # USDT-equivalent threshold
             use_testnet = False
+
+            settings = self.config.get('settings', {})
+            arb_alert_threshold = float(settings.get('arb_alert_threshold', 10.0))
+            arb_info_threshold = float(settings.get('arb_info_threshold', 3.0))
+            # arb_alert_threshold = float(settings.get('arb_alert_threshold', -5.0))
+            # arb_info_threshold = float(settings.get('arb_info_threshold', -10.0))
+
+            if arb_info_threshold >= arb_alert_threshold:
+                logger.warning(
+                    "arb_info_threshold >= arb_alert_threshold; "
+                    "adjust your config so info < alert."
+                )
 
             scenarios = find_arb_for_qty(
                 qty_fxs=qty_fxs,
@@ -423,20 +433,57 @@ class BlockchainMonitor:
                 use_testnet=use_testnet,
             )
 
-            # Already sorted by profit (low -> high) inside find_arb_for_qty
-            pretty_print_scenarios(scenarios, min_profit=min_profit_alert)
+            # Already sorted by profit (low -> high) in find_arb_for_qty
+            pretty_print_scenarios(scenarios, min_profit=arb_info_threshold)
 
             telegram = self.notifiers.get('telegram')
-            if telegram:
-                # Wrap with our existing TelegramNotifier
-                send_arb_alerts(
-                    scenarios=scenarios,
-                    min_profit=min_profit_alert,
-                    notifier=telegram,
-                    binance_symbol=binance_symbol,
-                    qty_fxs=qty_fxs,
-                    qty_wfrax=qty_wfrax,
+            if not telegram:
+                logger.warning("No Telegram notifier configured; skipping arb alerts")
+                return False
+
+            # Two-level handling
+            big_opps = []
+            info_opps = []
+
+            for s in scenarios:
+                p = s.profit_usdt_equiv
+                if p > arb_alert_threshold:
+                    big_opps.append(s)
+                elif p > arb_info_threshold:
+                    info_opps.append(s)
+
+            # 1) Big opportunities (urgent alerts)
+            for s in big_opps:
+                msg = (
+                    f"*ARB ALERT*\n\n"
+                    f"*Binance Market:* `{binance_symbol}`\n"
+                    f"*Profit:* `{s.profit_usdt_equiv:.6f}` USDT-equivalent\n\n"
+                    f"*Scenario:* {s.description}\n\n"
+                    f"*Leg 1:*\n`{s.leg1}`\n\n"
+                    f"*Leg 2:*\n`{s.leg2}`\n"
                 )
+                telegram.send_message(msg, urgent=True)
+
+            # 2) Info-only opportunities (non-urgent)
+            for s in info_opps:
+                msg = (
+                    f"Arb info:\n"
+                    f"Profit: {s.profit_usdt_equiv:.6f} USDT-equivalent\n"
+                    f"Scenario: {s.description}\n"
+                    f"Leg 1: {s.leg1}\n"
+                    f"Leg 2: {s.leg2}\n"
+                )
+                # If you want second bot for info, use:
+                # telegram.send_message_second_bot(msg)
+                # Otherwise, use non-urgent primary:
+                telegram.send_message_second_bot(msg)
+
+            if big_opps or info_opps:
+                logger.info(
+                    f"Arb check done. Big: {len(big_opps)}, Info: {len(info_opps)}"
+                )
+            else:
+                logger.info("Arb check done. No profitable opportunities.")
 
             return True
         except Exception as e:
