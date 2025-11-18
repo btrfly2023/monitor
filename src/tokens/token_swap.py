@@ -9,7 +9,10 @@ from datetime import datetime
 
 # CHANGEME: change below to add/remove pair monitoring
 TOKEN_ADDRESSES = {
+    # Ethereum
     "FXS": "0x3432b6a60d23ca0dfca7761b7ab56459d9c964d0",    # Frax Share
+    "frxUSD": "0xCAcd6fd266aF91b8AeD52aCCc382b4e165586E29",
+
     "cvxFXS": "0xFEEf77d3f69374f66429C91d732A244f074bdf74", 
     "pitchFXS": "0x11EBe21e9d7BF541A18e1E3aC94939018Ce88F0b",
     "sdFXS": "0x402F878BDd1f5C66FdAF0fabaBcF74741B68ac36",
@@ -22,6 +25,8 @@ TOKEN_ADDRESSES = {
     "FXB20271231_fraxtal": "0x6c9f4E6089c8890AfEE2bcBA364C2712f88fA818",
     "FXB20291231_fraxtal": "0xF1e2b576aF4C6a7eE966b14C810b772391e92153",
     "FXB20551231_fraxtal": "0xc38173D34afaEA88Bc482813B3CD267bc8A1EA83",
+
+    "frxUSD_fraxtal": "0xFc00000000000000000000000000000000000001",
 }
 
 # Token pairs to monitor

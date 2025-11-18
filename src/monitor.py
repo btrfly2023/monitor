@@ -19,6 +19,11 @@ from src.notifiers.telegram import TelegramNotifier
 from src.alerts.alert_system import AlertSystem
 import dotenv
 from src.tokens.token_monitor import monitor_token_swaps
+from src.arb.arb_finder import (
+    find_arb_for_qty,
+    pretty_print_scenarios,
+    send_arb_alerts,
+)
 
 # Import hot wallet monitor
 try:
@@ -394,20 +399,69 @@ class BlockchainMonitor:
         self.hot_wallet_thread.start()
         logger.info("Hot wallet monitor thread started")
 
+    def check_arb_opportunities(self):
+        """
+        Check FXS/WFRAX arbitrage opportunities every few minutes.
+
+        Uses:
+          - Binance: FXSUSDT
+          - ETH DEX: FXS <-> frxUSD
+          - Fraxtal DEX: WFRAX_fraxtal <-> frxUSD_fraxtal
+        """
+        try:
+            # Parameters – adjust as you like or read from config
+            binance_symbol = "FXSUSDT"
+            qty_fxs = 2000.0
+            qty_wfrax = 2000.0
+            min_profit_alert = 15.0   # USDT-equivalent threshold
+            use_testnet = False
+
+            scenarios = find_arb_for_qty(
+                qty_fxs=qty_fxs,
+                qty_wfrax=qty_wfrax,
+                binance_symbol=binance_symbol,
+                use_testnet=use_testnet,
+            )
+
+            # Already sorted by profit (low -> high) inside find_arb_for_qty
+            pretty_print_scenarios(scenarios, min_profit=min_profit_alert)
+
+            telegram = self.notifiers.get('telegram')
+            if telegram:
+                # Wrap with our existing TelegramNotifier
+                send_arb_alerts(
+                    scenarios=scenarios,
+                    min_profit=min_profit_alert,
+                    notifier=telegram,
+                    binance_symbol=binance_symbol,
+                    qty_fxs=qty_fxs,
+                    qty_wfrax=qty_wfrax,
+                )
+
+            return True
+        except Exception as e:
+            logger.error(f"Error checking arbitrage opportunities: {e}", exc_info=True)
+            return False
+
     def start(self):
         logger.info("Starting blockchain monitor")
         
         # Start hot wallet monitor in separate thread
-        self.start_hot_wallet_monitor_thread()
+        # self.start_hot_wallet_monitor_thread()
         
         # Run immediately on start
         self.run_queries()
         self.check_token_rates()
+        self.check_arb_opportunities()
         
         # Schedule regular runs
         interval_minutes = self.config.get('settings', {}).get('interval_minutes', 1)
         schedule.every(interval_minutes).minutes.do(self.run_queries)
         schedule.every(20 * interval_minutes).minutes.do(self.check_token_rates)
+
+        # Arb checks: e.g. every 5 * interval_minutes
+        arb_interval = self.config.get('settings', {}).get('arb_interval_minutes', 5 * interval_minutes)
+        schedule.every(arb_interval).minutes.do(self.check_arb_opportunities)
         
         try:
             while True:
