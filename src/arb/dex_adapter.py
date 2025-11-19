@@ -62,12 +62,12 @@ def dex_eth_sell_proceeds_stable_fx(token_symbol: str, qty_tokens: float) -> flo
     if token_symbol != "WFRAX":
         raise ValueError("dex_eth_sell_proceeds_stable_fx currently expects token_symbol == 'WFRAX'")
 
-    fxs_address = _get_address("WFRAX")
+    wfrax_address = _get_address("WFRAX")
 
     quote = get_token_swap_quote(
         input_token="WFRAX",
         output_token=ETH_STABLE_SYMBOL,
-        input_token_address=fxs_address,
+        input_token_address=wfrax_address,
         output_token_address=ETH_STABLE_ADDRESS,
         amount=qty_tokens,        # human WFRAX
         api="odos",
@@ -98,13 +98,13 @@ def dex_eth_buy_cost_stable_fx(token_symbol: str, qty_tokens: float) -> float:
     if token_symbol != "WFRAX":
         raise ValueError("dex_eth_buy_cost_stable_fx currently expects token_symbol == 'WFRAX'")
 
-    fxs_address = _get_address("WFRAX")
+    wfrax_address = _get_address("WFRAX")
 
     # Step 1: mid price via sell direction (WFRAX -> frxUSD)
     sell_quote = get_token_swap_quote(
         input_token="WFRAX",
         output_token=ETH_STABLE_SYMBOL,
-        input_token_address=fxs_address,
+        input_token_address=wfrax_address,
         output_token_address=ETH_STABLE_ADDRESS,
         amount=qty_tokens,        # human WFRAX
         api="odos",
@@ -123,7 +123,7 @@ def dex_eth_buy_cost_stable_fx(token_symbol: str, qty_tokens: float) -> float:
         input_token=ETH_STABLE_SYMBOL,
         output_token="WFRAX",
         input_token_address=ETH_STABLE_ADDRESS,
-        output_token_address=fxs_address,
+        output_token_address=wfrax_address,
         amount=approx_stable_in,  # human frxUSD
         api="odos",
         chain_id=ETH_CHAIN_ID,

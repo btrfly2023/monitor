@@ -66,16 +66,16 @@ def find_arb_for_qty(
         )
     )
 
-    # Scenario 2: Buy on ETH DEX, sell on Binance (FXS)
-    profit = b_sell_proceeds - e_buy_cost
-    scenarios.append(
-        ArbScenario(
-            description="Buy WFRAX on ETH DEX (frxUSD), sell FXS on Binance",
-            profit_usdt_equiv=profit,
-            leg1=f"BUY {qty_fxs} WFRAX on ETH DEX for ~{e_buy_cost:.4f} frxUSD",
-            leg2=f"SELL {qty_fxs} FXS on Binance ({binance_symbol}) for ~{b_sell_proceeds:.4f} USDT",
-        )
-    )
+    # # Scenario 2: Buy on ETH DEX, sell on Binance (FXS)
+    # profit = b_sell_proceeds - e_buy_cost
+    # scenarios.append(
+    #     ArbScenario(
+    #         description="Buy WFRAX on ETH DEX (frxUSD), sell FXS on Binance",
+    #         profit_usdt_equiv=profit,
+    #         leg1=f"BUY {qty_fxs} WFRAX on ETH DEX for ~{e_buy_cost:.4f} frxUSD",
+    #         leg2=f"SELL {qty_fxs} FXS on Binance ({binance_symbol}) for ~{b_sell_proceeds:.4f} USDT",
+    #     )
+    # )
 
     # ===== Fraxtal DEX on WFRAX =====
     f_buy_cost = dex_fraxtal_buy_cost_stable_wfrax(qty_wfrax)
@@ -95,19 +95,19 @@ def find_arb_for_qty(
         )
     )
 
-    # Scenario 4: Buy FXS on Binance, sell WFRAX on Fraxtal
-    profit = f_sell_proceeds - b_buy_cost
-    scenarios.append(
-        ArbScenario(
-            description="Buy FXS on Binance, sell WFRAX on Fraxtal (frxUSD_fraxtal)",
-            profit_usdt_equiv=profit,
-            leg1=f"BUY {qty_fxs} FXS on Binance ({binance_symbol}) for ~{b_buy_cost:.4f} USDT",
-            leg2=(
-                f"SELL {qty_wfrax} WFRAX_fraxtal on Fraxtal DEX "
-                f"for ~{f_sell_proceeds:.4f} frxUSD_fraxtal"
-            ),
-        )
-    )
+    # # Scenario 4: Buy FXS on Binance, sell WFRAX on Fraxtal
+    # profit = f_sell_proceeds - b_buy_cost
+    # scenarios.append(
+    #     ArbScenario(
+    #         description="Buy FXS on Binance, sell WFRAX on Fraxtal (frxUSD_fraxtal)",
+    #         profit_usdt_equiv=profit,
+    #         leg1=f"BUY {qty_fxs} FXS on Binance ({binance_symbol}) for ~{b_buy_cost:.4f} USDT",
+    #         leg2=(
+    #             f"SELL {qty_wfrax} WFRAX_fraxtal on Fraxtal DEX "
+    #             f"for ~{f_sell_proceeds:.4f} frxUSD_fraxtal"
+    #         ),
+    #     )
+    # )
 
     # Sort scenarios by profit, low -> high
     scenarios.sort(key=lambda s: s.profit_usdt_equiv)
