@@ -499,7 +499,7 @@ class BlockchainMonitor:
         # Run immediately on start
         self.run_queries()
         self.check_token_rates()
-        # self.check_arb_opportunities()
+        self.check_arb_opportunities()
         
         # Schedule regular runs
         interval_minutes = self.config.get('settings', {}).get('interval_minutes', 1)
@@ -507,8 +507,8 @@ class BlockchainMonitor:
         schedule.every(20 * interval_minutes).minutes.do(self.check_token_rates)
 
         # Arb checks: e.g. every 5 * interval_minutes
-        # arb_interval = self.config.get('settings', {}).get('arb_interval_minutes', 5 * interval_minutes)
-        # schedule.every(arb_interval).minutes.do(self.check_arb_opportunities)
+        arb_interval = self.config.get('settings', {}).get('arb_interval_minutes', 5 * interval_minutes)
+        schedule.every(arb_interval).minutes.do(self.check_arb_opportunities)
         
         try:
             while True:
