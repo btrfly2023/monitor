@@ -35,7 +35,7 @@ def find_arb_for_qty(
     """
     Compare:
       - Binance FXSUSDT (FXS <-> USDT)
-      - ETH DEX FXS <-> frxUSD
+      - ETH DEX WFRAX <-> frxUSD
       - Fraxtal DEX WFRAX_fraxtal <-> frxUSD_fraxtal
 
     We use:
@@ -48,52 +48,52 @@ def find_arb_for_qty(
 
     scenarios: List[ArbScenario] = []
 
-    # ===== Binance & ETH DEX on FXS =====
+    # ===== Binance & ETH DEX on WFRAX =====
     b_buy_cost = binance_buy_cost_usdt(client, binance_symbol, qty_fxs)
     b_sell_proceeds = binance_sell_proceeds_usdt(client, binance_symbol, qty_fxs)
 
-    e_buy_cost = dex_eth_buy_cost_stable_fx("FXS", qty_fxs)
-    e_sell_proceeds = dex_eth_sell_proceeds_stable_fx("FXS", qty_fxs)
+    e_buy_cost = dex_eth_buy_cost_stable_fx("WFRAX", qty_fxs)
+    e_sell_proceeds = dex_eth_sell_proceeds_stable_fx("WFRAX", qty_fxs)
 
     # Scenario 1: Buy on Binance, sell on ETH DEX (FXS)
     profit = e_sell_proceeds - b_buy_cost
     scenarios.append(
         ArbScenario(
-            description="Buy FXS on Binance, sell FXS on ETH DEX (frxUSD)",
+            description="Buy FXS on Binance, sell WFRAX on ETH DEX (frxUSD)",
             profit_usdt_equiv=profit,
             leg1=f"BUY {qty_fxs} FXS on Binance ({binance_symbol}) for ~{b_buy_cost:.4f} USDT",
-            leg2=f"SELL {qty_fxs} FXS on ETH DEX for ~{e_sell_proceeds:.4f} frxUSD",
+            leg2=f"SELL {qty_fxs} WFRAX on ETH DEX for ~{e_sell_proceeds:.4f} frxUSD",
         )
     )
 
-    # # Scenario 2: Buy on ETH DEX, sell on Binance (FXS)
-    # profit = b_sell_proceeds - e_buy_cost
-    # scenarios.append(
-    #     ArbScenario(
-    #         description="Buy FXS on ETH DEX (frxUSD), sell FXS on Binance",
-    #         profit_usdt_equiv=profit,
-    #         leg1=f"BUY {qty_fxs} FXS on ETH DEX for ~{e_buy_cost:.4f} frxUSD",
-    #         leg2=f"SELL {qty_fxs} FXS on Binance ({binance_symbol}) for ~{b_sell_proceeds:.4f} USDT",
-    #     )
-    # )
+    # Scenario 2: Buy on ETH DEX, sell on Binance (FXS)
+    profit = b_sell_proceeds - e_buy_cost
+    scenarios.append(
+        ArbScenario(
+            description="Buy WFRAX on ETH DEX (frxUSD), sell FXS on Binance",
+            profit_usdt_equiv=profit,
+            leg1=f"BUY {qty_fxs} WFRAX on ETH DEX for ~{e_buy_cost:.4f} frxUSD",
+            leg2=f"SELL {qty_fxs} FXS on Binance ({binance_symbol}) for ~{b_sell_proceeds:.4f} USDT",
+        )
+    )
 
     # ===== Fraxtal DEX on WFRAX =====
     f_buy_cost = dex_fraxtal_buy_cost_stable_wfrax(qty_wfrax)
     f_sell_proceeds = dex_fraxtal_sell_proceeds_stable_wfrax(qty_wfrax)
 
-    # # Scenario 3: Buy WFRAX on Fraxtal, sell FXS on Binance
-    # profit = b_sell_proceeds - f_buy_cost
-    # scenarios.append(
-    #     ArbScenario(
-    #         description="Buy WFRAX on Fraxtal (frxUSD_fraxtal), sell FXS on Binance",
-    #         profit_usdt_equiv=profit,
-    #         leg1=(
-    #             f"BUY {qty_wfrax} WFRAX_fraxtal on Fraxtal DEX "
-    #             f"for ~{f_buy_cost:.4f} frxUSD_fraxtal"
-    #         ),
-    #         leg2=f"SELL {qty_fxs} FXS on Binance ({binance_symbol}) for ~{b_sell_proceeds:.4f} USDT",
-    #     )
-    # )
+    # Scenario 3: Buy WFRAX on Fraxtal, sell FXS on Binance
+    profit = b_sell_proceeds - f_buy_cost
+    scenarios.append(
+        ArbScenario(
+            description="Buy WFRAX on Fraxtal (frxUSD_fraxtal), sell FXS on Binance",
+            profit_usdt_equiv=profit,
+            leg1=(
+                f"BUY {qty_wfrax} WFRAX_fraxtal on Fraxtal DEX "
+                f"for ~{f_buy_cost:.4f} frxUSD_fraxtal"
+            ),
+            leg2=f"SELL {qty_fxs} FXS on Binance ({binance_symbol}) for ~{b_sell_proceeds:.4f} USDT",
+        )
+    )
 
     # Scenario 4: Buy FXS on Binance, sell WFRAX on Fraxtal
     profit = f_sell_proceeds - b_buy_cost

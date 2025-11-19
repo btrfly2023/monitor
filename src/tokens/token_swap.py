@@ -11,6 +11,7 @@ from datetime import datetime
 TOKEN_ADDRESSES = {
     # Ethereum
     "FXS": "0x3432b6a60d23ca0dfca7761b7ab56459d9c964d0",    # Frax Share
+    "WFRAX": "0x04ACaF8D2865c0714F79da09645C13FD2888977f",    # WFrax
     "frxUSD": "0xCAcd6fd266aF91b8AeD52aCCc382b4e165586E29",
 
     "cvxFXS": "0xFEEf77d3f69374f66429C91d732A244f074bdf74", 
