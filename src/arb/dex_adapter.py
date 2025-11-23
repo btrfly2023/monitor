@@ -166,6 +166,32 @@ def dex_eth_buy_wfrax_from_usdt(usdt_amount: float) -> float:
     return quote["output_amount"]  # human WFRAX
 
 
+def dex_eth_convert_wfrax_to_fxs(qty_wfrax: float) -> float:
+    """
+    Convert WFRAX to FXS on ETH DEX using Odos.
+    Accounts for the negative premium when swapping from WFRAX to FXS.
+
+    Direction: WFRAX -> FXS
+    Returns: amount of FXS received
+    """
+    wfrax_address = _get_address("WFRAX")
+    fxs_address = _get_address("FXS")
+
+    quote = get_token_swap_quote(
+        input_token="WFRAX",
+        output_token="FXS",
+        input_token_address=wfrax_address,
+        output_token_address=fxs_address,
+        amount=qty_wfrax,  # human WFRAX
+        api="odos",
+        chain_id=ETH_CHAIN_ID,
+    )
+    if quote is None:
+        raise RuntimeError("Odos ETH quote failed for WFRAX -> FXS")
+
+    return quote["output_amount"]  # human FXS
+
+
 # =====================================================================
 # Fraxtal DEX: WFRAX_fraxtal <-> frxUSD_fraxtal
 # (Keeping for backward compatibility, but not used in simplified arb)

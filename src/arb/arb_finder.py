@@ -12,6 +12,7 @@ from .binance_adapter import (
 from .dex_adapter import (
     dex_eth_sell_wfrax_proceeds_usdt,
     dex_eth_buy_wfrax_from_usdt,
+    dex_eth_convert_wfrax_to_fxs,
 )
 
 from src.notifiers.telegram import TelegramNotifier  # adjust import if needed
@@ -65,18 +66,20 @@ def find_arb_for_qty(
     )
 
     # ===== Scenario 2: Fixed USDT amount =====
-    # Spend usdt_amount to buy WFRAX on DEX, then compare with FXS on Binance
+    # Spend usdt_amount to buy WFRAX on DEX, convert to FXS, then sell FXS on Binance
     wfrax_bought_on_dex = dex_eth_buy_wfrax_from_usdt(usdt_amount)  # WFRAX received from DEX
-    # Compare: sell equivalent FXS on Binance (treating WFRAX and FXS as equivalent for comparison)
-    binance_sell_proceeds = binance_sell_proceeds_usdt(client, binance_symbol, wfrax_bought_on_dex)  # USDT received
+    # Convert WFRAX to FXS (accounts for negative premium)
+    fxs_from_wfrax = dex_eth_convert_wfrax_to_fxs(wfrax_bought_on_dex)  # FXS received after conversion
+    # Sell FXS on Binance
+    binance_sell_proceeds = binance_sell_proceeds_usdt(client, binance_symbol, fxs_from_wfrax)  # USDT received
     
     profit2 = binance_sell_proceeds - usdt_amount
     scenarios.append(
         ArbScenario(
-            description="Buy WFRAX on DEX with USDT, sell FXS on Binance (fixed USDT amount)",
+            description="Buy WFRAX on DEX with USDT, convert to FXS, sell FXS on Binance (fixed USDT amount)",
             profit_usdt_equiv=profit2,
-            leg1=f"BUY ~{wfrax_bought_on_dex:.4f} WFRAX on ETH DEX for ~{usdt_amount:.4f} USDT",
-            leg2=f"SELL ~{wfrax_bought_on_dex:.4f} FXS on Binance ({binance_symbol}) for ~{binance_sell_proceeds:.4f} USDT",
+            leg1=f"BUY ~{wfrax_bought_on_dex:.4f} WFRAX on ETH DEX for ~{usdt_amount:.4f} USDT, convert to ~{fxs_from_wfrax:.4f} FXS",
+            leg2=f"SELL ~{fxs_from_wfrax:.4f} FXS on Binance ({binance_symbol}) for ~{binance_sell_proceeds:.4f} USDT",
         )
     )
 
