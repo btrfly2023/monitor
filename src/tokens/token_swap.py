@@ -47,6 +47,7 @@ TOKEN_PAIRS_MONITOR = [
 # Token decimals
 TOKEN_DECIMALS = {
     "FXS": 18,
+    "USDT": 6,
 }
 
 
