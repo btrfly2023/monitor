@@ -202,7 +202,7 @@ def get_odos_swap_quote(input_token, output_token, input_token_address, output_t
         json=quote_request_body
     )
     if output_token == "USDT":
-        output_human_amount = quote["outAmounts"][0] / (10 ** 6)
+        output_human_amount = float(response.json()["outAmounts"][0]) / (10 ** 6)
     else:
         output_human_amount = parse_response(response)
  
