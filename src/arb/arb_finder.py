@@ -10,10 +10,8 @@ from .binance_adapter import (
     binance_sell_proceeds_usdt,
 )
 from .dex_adapter import (
-    dex_eth_buy_cost_stable_fx,
-    dex_eth_sell_proceeds_stable_fx,
-    dex_fraxtal_buy_cost_stable_wfrax,
-    dex_fraxtal_sell_proceeds_stable_wfrax,
+    dex_eth_sell_wfrax_proceeds_usdt,
+    dex_eth_buy_wfrax_from_usdt,
 )
 
 from src.notifiers.telegram import TelegramNotifier  # adjust import if needed
@@ -28,91 +26,65 @@ class ArbScenario:
 
 def find_arb_for_qty(
     qty_fxs: float,
-    qty_wfrax: float,
+    usdt_amount: float,
     binance_symbol: str,
     use_testnet: bool = False,
 ) -> List[ArbScenario]:
     """
-    Compare:
-      - Binance FXSUSDT (FXS <-> USDT)
-      - ETH DEX WFRAX <-> frxUSD
-      - Fraxtal DEX WFRAX_fraxtal <-> frxUSD_fraxtal
+    Compare WFRAX (DEX) vs FXS (Binance) prices.
 
-    We use:
-      - qty_fxs for Binance and ETH DEX legs
-      - qty_wfrax for Fraxtal legs
+    Two scenarios:
+    1. Sell fixed qty_fxs WFRAX on DEX, buy qty_fxs FXS on Binance
+       - Profit = (USDT received from Binance) - (USDT received from DEX)
+    
+    2. Spend fixed usdt_amount to buy WFRAX on DEX, then sell that WFRAX on Binance
+       - Note: This compares WFRAX on DEX vs FXS on Binance (different tokens)
+       - Profit = (USDT received from Binance for FXS) - usdt_amount
 
-    Profits are in stable units, treated as USDT-equivalent.
+    Profits are in USDT units.
     """
     client = make_binance_client(use_testnet=use_testnet)
 
     scenarios: List[ArbScenario] = []
 
-    # ===== Binance & ETH DEX on WFRAX =====
-    b_buy_cost = binance_buy_cost_usdt(client, binance_symbol, qty_fxs)
-    b_sell_proceeds = binance_sell_proceeds_usdt(client, binance_symbol, qty_fxs)
-
-    e_buy_cost = dex_eth_buy_cost_stable_fx("WFRAX", qty_fxs)
-    e_sell_proceeds = dex_eth_sell_proceeds_stable_fx("WFRAX", qty_fxs)
-
-    # Scenario 1: Buy on Binance, sell on ETH DEX (FXS)
-    profit = e_sell_proceeds - b_buy_cost
+    # ===== Scenario 1: Fixed quantity =====
+    # Sell qty_fxs WFRAX on DEX, buy qty_fxs FXS on Binance
+    dex_sell_proceeds = dex_eth_sell_wfrax_proceeds_usdt(qty_fxs)  # USDT received from DEX
+    binance_buy_cost = binance_buy_cost_usdt(client, binance_symbol, qty_fxs)  # USDT spent on Binance
+    
+    # Profit: if we sell WFRAX on DEX and buy FXS on Binance
+    # Note: Comparing WFRAX (DEX) vs FXS (Binance) - treating as equivalent for comparison
+    profit1 = dex_sell_proceeds - binance_buy_cost
     scenarios.append(
         ArbScenario(
-            description="Buy FXS on Binance, sell WFRAX on ETH DEX (frxUSD)",
-            profit_usdt_equiv=profit,
-            leg1=f"BUY {qty_fxs} FXS on Binance ({binance_symbol}) for ~{b_buy_cost:.4f} USDT",
-            leg2=f"SELL {qty_fxs} WFRAX on ETH DEX for ~{e_sell_proceeds:.4f} frxUSD",
+            description="Sell WFRAX on DEX, buy FXS on Binance (fixed quantity)",
+            profit_usdt_equiv=profit1,
+            leg1=f"SELL {qty_fxs} WFRAX on ETH DEX for ~{dex_sell_proceeds:.4f} USDT",
+            leg2=f"BUY {qty_fxs} FXS on Binance ({binance_symbol}) for ~{binance_buy_cost:.4f} USDT",
         )
     )
 
-    # # Scenario 2: Buy on ETH DEX, sell on Binance (FXS)
-    # profit = b_sell_proceeds - e_buy_cost
-    # scenarios.append(
-    #     ArbScenario(
-    #         description="Buy WFRAX on ETH DEX (frxUSD), sell FXS on Binance",
-    #         profit_usdt_equiv=profit,
-    #         leg1=f"BUY {qty_fxs} WFRAX on ETH DEX for ~{e_buy_cost:.4f} frxUSD",
-    #         leg2=f"SELL {qty_fxs} FXS on Binance ({binance_symbol}) for ~{b_sell_proceeds:.4f} USDT",
-    #     )
-    # )
-
-    # ===== Fraxtal DEX on WFRAX =====
-    f_buy_cost = dex_fraxtal_buy_cost_stable_wfrax(qty_wfrax)
-    f_sell_proceeds = dex_fraxtal_sell_proceeds_stable_wfrax(qty_wfrax)
-
-    # Scenario 3: Buy WFRAX on Fraxtal, sell FXS on Binance
-    profit = b_sell_proceeds - f_buy_cost
+    # ===== Scenario 2: Fixed USDT amount =====
+    # Spend usdt_amount to buy WFRAX on DEX, then compare with FXS on Binance
+    wfrax_bought_on_dex = dex_eth_buy_wfrax_from_usdt(usdt_amount)  # WFRAX received from DEX
+    # Compare: sell equivalent FXS on Binance (treating WFRAX and FXS as equivalent for comparison)
+    binance_sell_proceeds = binance_sell_proceeds_usdt(client, binance_symbol, wfrax_bought_on_dex)  # USDT received
+    
+    profit2 = binance_sell_proceeds - usdt_amount
     scenarios.append(
         ArbScenario(
-            description="Buy WFRAX on Fraxtal (frxUSD_fraxtal), sell FXS on Binance",
-            profit_usdt_equiv=profit,
-            leg1=(
-                f"BUY {qty_wfrax} WFRAX_fraxtal on Fraxtal DEX "
-                f"for ~{f_buy_cost:.4f} frxUSD_fraxtal"
-            ),
-            leg2=f"SELL {qty_fxs} FXS on Binance ({binance_symbol}) for ~{b_sell_proceeds:.4f} USDT",
+            description="Buy WFRAX on DEX with USDT, sell FXS on Binance (fixed USDT amount)",
+            profit_usdt_equiv=profit2,
+            leg1=f"BUY ~{wfrax_bought_on_dex:.4f} WFRAX on ETH DEX for ~{usdt_amount:.4f} USDT",
+            leg2=f"SELL ~{wfrax_bought_on_dex:.4f} FXS on Binance ({binance_symbol}) for ~{binance_sell_proceeds:.4f} USDT",
         )
     )
-
-    # # Scenario 4: Buy FXS on Binance, sell WFRAX on Fraxtal
-    # profit = f_sell_proceeds - b_buy_cost
-    # scenarios.append(
-    #     ArbScenario(
-    #         description="Buy FXS on Binance, sell WFRAX on Fraxtal (frxUSD_fraxtal)",
-    #         profit_usdt_equiv=profit,
-    #         leg1=f"BUY {qty_fxs} FXS on Binance ({binance_symbol}) for ~{b_buy_cost:.4f} USDT",
-    #         leg2=(
-    #             f"SELL {qty_wfrax} WFRAX_fraxtal on Fraxtal DEX "
-    #             f"for ~{f_sell_proceeds:.4f} frxUSD_fraxtal"
-    #         ),
-    #     )
-    # )
 
     # Sort scenarios by profit, low -> high
     scenarios.sort(key=lambda s: s.profit_usdt_equiv)
 
     return scenarios
+
 
 def pretty_print_scenarios(scenarios: List[ArbScenario], min_profit: float = 0.0):
     print("=== Arbitrage Scenarios (sorted by profit, low -> high) ===")
@@ -130,7 +102,7 @@ def send_arb_alerts(
     notifier: TelegramNotifier,
     binance_symbol: str,
     qty_fxs: float,
-    qty_wfrax: float,
+    usdt_amount: float,
 ):
     for s in scenarios:
         if s.profit_usdt_equiv <= min_profit:
@@ -139,8 +111,8 @@ def send_arb_alerts(
         msg = (
             f"*Arb Opportunity Detected*\n\n"
             f"*Binance Market:* `{binance_symbol}`\n"
-            f"*Size FXS:* `{qty_fxs}` tokens\n"
-            f"*Size WFRAX_fraxtal:* `{qty_wfrax}` tokens\n"
+            f"*Fixed FXS Quantity:* `{qty_fxs}` tokens\n"
+            f"*Fixed USDT Amount:* `{usdt_amount}` USDT\n"
             f"*Scenario:* {s.description}\n\n"
             f"*Estimated Profit:* `{s.profit_usdt_equiv:.6f} USDT-equivalent`\n\n"
             f"*Leg 1:*\n"
@@ -172,15 +144,15 @@ def _make_telegram_notifier_from_env() -> Optional[TelegramNotifier]:
 
 if __name__ == "__main__":
     BINANCE_SYMBOL = "FXSUSDT"
-    QTY_FXS = 1000.0      # FXS on Binance / ETH
-    QTY_WFRAX = 1000.0    # WFRAX on Fraxtal
+    QTY_FXS = 2000.0      # Fixed FXS quantity for scenario 1
+    USDT_AMOUNT = 2000.0  # Fixed USDT amount for scenario 2
 
     # MIN_PROFIT_ALERT = 10.0  # USDT-equivalent
     MIN_PROFIT_ALERT = -10.0  # USDT-equivalent
 
     scenarios = find_arb_for_qty(
         qty_fxs=QTY_FXS,
-        qty_wfrax=QTY_WFRAX,
+        usdt_amount=USDT_AMOUNT,
         binance_symbol=BINANCE_SYMBOL,
         use_testnet=False,
     )
@@ -194,7 +166,7 @@ if __name__ == "__main__":
             notifier=notifier,
             binance_symbol=BINANCE_SYMBOL,
             qty_fxs=QTY_FXS,
-            qty_wfrax=QTY_WFRAX,
+            usdt_amount=USDT_AMOUNT,
         )
     else:
         print("Telegram notifier not configured; skipping alerts.")

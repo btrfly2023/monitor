@@ -2,21 +2,24 @@
 
 """
 DEX adapter: uses Odos via src.tokens.token_swap.get_token_swap_quote
-to quote FRAX-based stables on Ethereum and Fraxtal.
+to quote tokens on Ethereum and Fraxtal.
 
 On Ethereum:
-    WFRAX <-> frxUSD
+    WFRAX <-> USDT
 
 On Fraxtal:
-    WFRAX_fraxtal <-> frxUSD_fraxtal
+    WFRAX_fraxtal <-> frxUSD_fraxtal (for backward compatibility)
 
-Exports:
-    dex_eth_buy_cost_stable_fx(qty_fxs)
-    dex_eth_sell_proceeds_stable_fx(qty_fxs)
+Exports for WFRAX (Ethereum):
+    dex_eth_sell_wfrax_proceeds_usdt(qty_wfrax) - Sell WFRAX, get USDT
+    dex_eth_buy_wfrax_cost_usdt(qty_wfrax) - Cost to buy qty_wfrax WFRAX
+    dex_eth_buy_wfrax_from_usdt(usdt_amount) - Buy WFRAX with USDT, get WFRAX amount
+
+Exports for WFRAX (Fraxtal, backward compatibility):
     dex_fraxtal_buy_cost_stable_wfrax(qty_wfrax)
     dex_fraxtal_sell_proceeds_stable_wfrax(qty_wfrax)
 
-All amounts returned are in *human stable units* (frxUSD / frxUSD_fraxtal),
+All amounts returned are in *human stable units* (USDT / frxUSD_fraxtal),
 treated as USDT-equivalent.
 
 Note:
@@ -32,8 +35,9 @@ from src.tokens.token_swap import (
 
 # ===== Ethereum mainnet config =====
 ETH_CHAIN_ID = 1
-ETH_STABLE_SYMBOL = "frxUSD"
-ETH_STABLE_ADDRESS = TOKEN_ADDRESSES["frxUSD"]
+ETH_STABLE_SYMBOL = "USDT"
+# USDT address on Ethereum mainnet
+ETH_STABLE_ADDRESS = "0xdAC17F958D2ee523a2206206994597C13D831ec7"
 
 # ===== Fraxtal config =====
 FRAXTAL_CHAIN_ID = 252  # TODO: confirm Odos chainId for Fraxtal
@@ -50,18 +54,15 @@ def _get_address(symbol: str) -> str:
 
 
 # =====================================================================
-# Ethereum DEX: WFRAX <-> frxUSD
+# Ethereum DEX: WFRAX <-> USDT
 # =====================================================================
 
-def dex_eth_sell_proceeds_stable_fx(token_symbol: str, qty_tokens: float) -> float:
+def dex_eth_sell_wfrax_proceeds_usdt(qty_wfrax: float) -> float:
     """
-    Proceeds in frxUSD (Ethereum) from SELLING `qty_tokens` WFRAX on ETH DEX.
+    Proceeds in USDT (Ethereum) from SELLING `qty_wfrax` WFRAX on ETH DEX.
 
-    Direction: WFRAX -> frxUSD
+    Direction: WFRAX -> USDT
     """
-    if token_symbol != "WFRAX":
-        raise ValueError("dex_eth_sell_proceeds_stable_fx currently expects token_symbol == 'WFRAX'")
-
     wfrax_address = _get_address("WFRAX")
 
     quote = get_token_swap_quote(
@@ -69,76 +70,105 @@ def dex_eth_sell_proceeds_stable_fx(token_symbol: str, qty_tokens: float) -> flo
         output_token=ETH_STABLE_SYMBOL,
         input_token_address=wfrax_address,
         output_token_address=ETH_STABLE_ADDRESS,
-        amount=qty_tokens,        # human WFRAX
+        amount=qty_wfrax,        # human WFRAX
         api="odos",
         chain_id=ETH_CHAIN_ID,
     )
     if quote is None:
-        raise RuntimeError("Odos ETH quote failed for WFRAX -> frxUSD")
+        raise RuntimeError("Odos ETH quote failed for WFRAX -> USDT")
 
-    stable_received = quote["output_amount"]  # human frxUSD
-    return stable_received
+    usdt_received = quote["output_amount"]  # human USDT
+    return usdt_received
 
 
-def dex_eth_buy_cost_stable_fx(token_symbol: str, qty_tokens: float) -> float:
+def dex_eth_buy_wfrax_cost_usdt(qty_wfrax: float) -> float:
     """
-    Cost in frxUSD (Ethereum) to BUY `qty_tokens` of WFRAX on ETH DEX.
+    Cost in USDT (Ethereum) to BUY `qty_wfrax` WFRAX on ETH DEX.
 
-    Direction: frxUSD -> WFRAX
+    Direction: USDT -> WFRAX
 
-    Implementation (simple but directional):
-        1) Quote WFRAX -> frxUSD for qty_tokens (to get a mid price).
-        2) Use that mid price as an approximate frxUSD input size.
-        3) Quote frxUSD -> WFRAX with that input size.
-        4) Return the actual frxUSD spent according to the buy-direction quote.
-
-    This captures spread/asymmetry between buy and sell directions,
-    even though the size is matched only approximately.
+    Uses simple approach: quote the buy direction with an estimated USDT amount
+    based on the sell direction, then adjust iteratively.
     """
-    if token_symbol != "WFRAX":
-        raise ValueError("dex_eth_buy_cost_stable_fx currently expects token_symbol == 'WFRAX'")
-
     wfrax_address = _get_address("WFRAX")
 
-    # Step 1: mid price via sell direction (WFRAX -> frxUSD)
+    # Get initial estimate via sell direction (WFRAX -> USDT)
     sell_quote = get_token_swap_quote(
         input_token="WFRAX",
         output_token=ETH_STABLE_SYMBOL,
         input_token_address=wfrax_address,
         output_token_address=ETH_STABLE_ADDRESS,
-        amount=qty_tokens,        # human WFRAX
+        amount=qty_wfrax,        # human WFRAX
         api="odos",
         chain_id=ETH_CHAIN_ID,
     )
     if sell_quote is None:
-        raise RuntimeError(
-            "Odos ETH quote failed for WFRAX -> frxUSD (mid-price for buy approximation)"
-        )
+        raise RuntimeError("Odos ETH quote failed for WFRAX -> USDT (initial estimate)")
 
-    stable_mid = sell_quote["output_amount"]  # frxUSD from selling qty_tokens
-    approx_stable_in = stable_mid
-
-    # Step 2: actual buy direction (frxUSD -> WFRAX)
+    usdt_estimate = sell_quote["output_amount"]  # USDT from selling qty_wfrax
+    
+    # Quote buy direction with estimated amount
     buy_quote = get_token_swap_quote(
         input_token=ETH_STABLE_SYMBOL,
         output_token="WFRAX",
         input_token_address=ETH_STABLE_ADDRESS,
         output_token_address=wfrax_address,
-        amount=approx_stable_in,  # human frxUSD
+        amount=usdt_estimate,  # human USDT
         api="odos",
         chain_id=ETH_CHAIN_ID,
     )
     if buy_quote is None:
-        raise RuntimeError("Odos ETH quote failed for frxUSD -> WFRAX (buy direction)")
+        raise RuntimeError("Odos ETH quote failed for USDT -> WFRAX (buy direction)")
 
-    # The quote structure was normalized in get_token_swap_quote.
-    # We want the actual frxUSD input used for this route.
-    stable_spent = buy_quote["input_amount"]  # human frxUSD
-    return stable_spent
+    # If we got less than target, adjust proportionally
+    actual_output = buy_quote["output_amount"]
+    if actual_output > 0 and actual_output < qty_wfrax:
+        ratio = qty_wfrax / actual_output
+        adjusted_usdt = usdt_estimate * ratio
+        # Re-quote with adjusted amount
+        buy_quote = get_token_swap_quote(
+            input_token=ETH_STABLE_SYMBOL,
+            output_token="WFRAX",
+            input_token_address=ETH_STABLE_ADDRESS,
+            output_token_address=wfrax_address,
+            amount=adjusted_usdt,
+            api="odos",
+            chain_id=ETH_CHAIN_ID,
+        )
+        if buy_quote is None:
+            return adjusted_usdt  # Return estimate if quote fails
+        return buy_quote["input_amount"]
+    
+    return buy_quote["input_amount"]
+
+
+def dex_eth_buy_wfrax_from_usdt(usdt_amount: float) -> float:
+    """
+    How much WFRAX can be bought on ETH DEX with `usdt_amount` USDT.
+
+    Direction: USDT -> WFRAX
+    Returns: amount of WFRAX received
+    """
+    wfrax_address = _get_address("WFRAX")
+
+    quote = get_token_swap_quote(
+        input_token=ETH_STABLE_SYMBOL,
+        output_token="WFRAX",
+        input_token_address=ETH_STABLE_ADDRESS,
+        output_token_address=wfrax_address,
+        amount=usdt_amount,  # human USDT
+        api="odos",
+        chain_id=ETH_CHAIN_ID,
+    )
+    if quote is None:
+        raise RuntimeError("Odos ETH quote failed for USDT -> WFRAX")
+
+    return quote["output_amount"]  # human WFRAX
 
 
 # =====================================================================
 # Fraxtal DEX: WFRAX_fraxtal <-> frxUSD_fraxtal
+# (Keeping for backward compatibility, but not used in simplified arb)
 # =====================================================================
 
 def dex_fraxtal_sell_proceeds_stable_wfrax(qty_wfrax: float) -> float:
@@ -170,16 +200,10 @@ def dex_fraxtal_buy_cost_stable_wfrax(qty_wfrax: float) -> float:
     Cost in frxUSD_fraxtal to BUY `qty_wfrax` WFRAX_fraxtal on Fraxtal DEX.
 
     Direction: frxUSD_fraxtal -> WFRAX_fraxtal
-
-    Implementation mirrors the ETH version:
-        1) Quote WFRAX -> frxUSD_fraxtal for qty_wfrax (mid price).
-        2) Use that to approximate needed frxUSD_fraxtal input.
-        3) Quote frxUSD_fraxtal -> WFRAX with that input.
-        4) Return the actual stable spent.
     """
     wfrax_address = FRAXTAL_WFRAX_ADDRESS
 
-    # Step 1: mid price via sell direction (WFRAX -> frxUSD_fraxtal)
+    # Get initial estimate via sell direction
     sell_quote = get_token_swap_quote(
         input_token=FRAXTAL_WFRAX_SYMBOL,
         output_token=FRAXTAL_STABLE_SYMBOL,
@@ -190,27 +214,39 @@ def dex_fraxtal_buy_cost_stable_wfrax(qty_wfrax: float) -> float:
         chain_id=FRAXTAL_CHAIN_ID,
     )
     if sell_quote is None:
-        raise RuntimeError(
-            "Odos Fraxtal quote failed for WFRAX -> frxUSD_fraxtal (mid-price for buy approximation)"
-        )
+        raise RuntimeError("Odos Fraxtal quote failed for WFRAX -> frxUSD_fraxtal (initial estimate)")
 
-    stable_mid = sell_quote["output_amount"]  # frxUSD_fraxtal
-    approx_stable_in = stable_mid
-
-    # Step 2: actual buy direction (frxUSD_fraxtal -> WFRAX)
+    stable_estimate = sell_quote["output_amount"]  # frxUSD_fraxtal
+    
+    # Quote buy direction
     buy_quote = get_token_swap_quote(
         input_token=FRAXTAL_STABLE_SYMBOL,
         output_token=FRAXTAL_WFRAX_SYMBOL,
         input_token_address=FRAXTAL_STABLE_ADDRESS,
         output_token_address=wfrax_address,
-        amount=approx_stable_in,  # human frxUSD_fraxtal
+        amount=stable_estimate,  # human frxUSD_fraxtal
         api="odos",
         chain_id=FRAXTAL_CHAIN_ID,
     )
     if buy_quote is None:
-        raise RuntimeError(
-            "Odos Fraxtal quote failed for frxUSD_fraxtal -> WFRAX (buy direction)"
-        )
+        raise RuntimeError("Odos Fraxtal quote failed for frxUSD_fraxtal -> WFRAX (buy direction)")
 
-    stable_spent = buy_quote["input_amount"]  # human frxUSD_fraxtal
-    return stable_spent
+    # Adjust if needed
+    actual_output = buy_quote["output_amount"]
+    if actual_output > 0 and actual_output < qty_wfrax:
+        ratio = qty_wfrax / actual_output
+        adjusted_stable = stable_estimate * ratio
+        buy_quote = get_token_swap_quote(
+            input_token=FRAXTAL_STABLE_SYMBOL,
+            output_token=FRAXTAL_WFRAX_SYMBOL,
+            input_token_address=FRAXTAL_STABLE_ADDRESS,
+            output_token_address=wfrax_address,
+            amount=adjusted_stable,
+            api="odos",
+            chain_id=FRAXTAL_CHAIN_ID,
+        )
+        if buy_quote is None:
+            return adjusted_stable
+        return buy_quote["input_amount"]
+    
+    return buy_quote["input_amount"]

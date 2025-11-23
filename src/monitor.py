@@ -401,22 +401,26 @@ class BlockchainMonitor:
 
     def check_arb_opportunities(self):
         """
-        Check FXS/WFRAX arbitrage opportunities every few minutes.
+        Check FXS arbitrage opportunities between Binance and ETH DEX.
 
-        Two levels:
+        Two scenarios:
+          1. Fixed FXS quantity: Sell FXS on DEX, buy FXS on Binance
+          2. Fixed USDT amount: Buy FXS on DEX, sell FXS on Binance
+
+        Two alert levels:
           - If profit > arb_alert_threshold: send urgent alert.
           - If arb_info_threshold < profit <= arb_alert_threshold: send info-only message.
         """
         try:
             # Parameters – you can move these to config if you like
             binance_symbol = "FXSUSDT"
-            qty_fxs = 2000.0
-            qty_wfrax = 2000.0
+            qty_fxs = 2000.0  # Fixed FXS quantity for scenario 1
+            usdt_amount = 2000.0  # Fixed USDT amount for scenario 2
             use_testnet = False
 
             settings = self.config.get('settings', {})
             arb_alert_threshold = float(settings.get('arb_alert_threshold', 10.0))
-            arb_info_threshold = float(settings.get('arb_info_threshold', 3.0))
+            arb_info_threshold = float(settings.get('arb_info_threshold', 5.0))
             # arb_alert_threshold = float(settings.get('arb_alert_threshold', -5.0))
             # arb_info_threshold = float(settings.get('arb_info_threshold', -10.0))
 
@@ -428,7 +432,7 @@ class BlockchainMonitor:
 
             scenarios = find_arb_for_qty(
                 qty_fxs=qty_fxs,
-                qty_wfrax=qty_wfrax,
+                usdt_amount=usdt_amount,
                 binance_symbol=binance_symbol,
                 use_testnet=use_testnet,
             )
