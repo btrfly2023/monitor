@@ -24,6 +24,7 @@ class ArbScenario:
     profit_usdt_equiv: float
     leg1: str
     leg2: str
+    leg3: Optional[str] = None  # For conversion step
 
 
 @dataclass
@@ -78,14 +79,14 @@ def find_arb_for_qty(
     Generic arb finder supporting CEX-DEX and DEX-DEX arbitrage.
 
     Two scenarios:
-    1. Fixed token quantity: sell on venue1, buy on venue2.
-    2. Fixed USDT amount: buy on venue1, sell on venue2.
+    1. Fixed token quantity: sell on venue1, buy on venue2 (with conversion if needed).
+    2. Fixed USDT amount: buy on venue1, sell on venue2 (with conversion if needed).
     """
     scenarios: List[ArbScenario] = []
     prefix = f"[{config.description_prefix}] " if config.description_prefix else ""
 
     # ===== Scenario 1: Fixed quantity =====
-    # Sell qty_token on venue1, buy qty_token on venue2
+    # Sell qty_token on venue1, convert if needed, buy on venue2
 
     # Sell on venue1
     if config.venue1_type == 'cex':
@@ -106,18 +107,53 @@ def find_arb_for_qty(
     else:
         raise ValueError(f"Unknown venue1_type: {config.venue1_type}")
 
+    # Check if we need token conversion
+    needs_conversion = config.venue1_token_symbol != config.venue2_token_symbol
+    conversion_leg = None
+    qty_venue2_token = qty_token  # Default: same quantity
+
+    if needs_conversion:
+        # We need to convert from venue1_token to venue2_token
+        # This can only happen on DEX
+        if config.venue2_type == 'dex':
+            # Convert on venue2's DEX
+            qty_venue2_token = dex_eth_convert_token_to_token(
+                input_token_symbol=config.venue1_token_symbol,
+                output_token_symbol=config.venue2_token_symbol,
+                qty_input=qty_token,
+                chain_id=config.venue2_chain_id,
+            )
+            conversion_leg = (
+                f"CONVERT {qty_token} {config.venue1_token_symbol} → "
+                f"~{qty_venue2_token:.4f} {config.venue2_token_symbol} on DEX Chain-{config.venue2_chain_id}"
+            )
+        elif config.venue1_type == 'dex':
+            # Convert on venue1's DEX
+            qty_venue2_token = dex_eth_convert_token_to_token(
+                input_token_symbol=config.venue1_token_symbol,
+                output_token_symbol=config.venue2_token_symbol,
+                qty_input=qty_token,
+                chain_id=config.venue1_chain_id,
+            )
+            conversion_leg = (
+                f"CONVERT {qty_token} {config.venue1_token_symbol} → "
+                f"~{qty_venue2_token:.4f} {config.venue2_token_symbol} on DEX Chain-{config.venue1_chain_id}"
+            )
+        else:
+            # CEX-to-CEX conversion not supported, assume 1:1
+            qty_venue2_token = qty_token
+
     # Buy on venue2
     if config.venue2_type == 'cex':
         client = make_binance_client(use_testnet=config.use_testnet)
         venue2_buy_cost = binance_buy_cost_usdt(
             client,
             config.venue2_symbol,
-            qty_token
+            qty_venue2_token
         )
         venue2_name = f"Binance ({config.venue2_symbol})"
     elif config.venue2_type == 'dex':
         # For DEX buy, we need to estimate cost
-        # Use sell quote as approximation, then adjust
         from .dex_adapter import get_token_swap_quote, _get_address
 
         token_addr = _get_address(config.venue2_token_symbol)
@@ -129,7 +165,7 @@ def find_arb_for_qty(
             output_token=config.venue2_stable_symbol,
             input_token_address=token_addr,
             output_token_address=stable_addr,
-            amount=qty_token,
+            amount=qty_venue2_token,
             api="odos",
             chain_id=config.venue2_chain_id,
         )
@@ -153,8 +189,8 @@ def find_arb_for_qty(
         else:
             # Adjust if needed
             actual_output = buy_quote["output_amount"]
-            if actual_output > 0 and actual_output < qty_token:
-                ratio = qty_token / actual_output
+            if actual_output > 0 and actual_output < qty_venue2_token:
+                ratio = qty_venue2_token / actual_output
                 venue2_buy_cost = stable_estimate * ratio
             else:
                 venue2_buy_cost = buy_quote["input_amount"]
@@ -164,26 +200,31 @@ def find_arb_for_qty(
         raise ValueError(f"Unknown venue2_type: {config.venue2_type}")
 
     profit1 = venue1_sell_proceeds - venue2_buy_cost
+
+    scenario_desc = (
+        f"{prefix}Sell {config.venue1_token_symbol} on {venue1_name}, "
+        f"{'convert, ' if needs_conversion else ''}"
+        f"buy {config.venue2_token_symbol} on {venue2_name} (fixed quantity)"
+    )
+
     scenarios.append(
         ArbScenario(
-            description=(
-                f"{prefix}Sell {config.venue1_token_symbol} on {venue1_name}, "
-                f"buy {config.venue2_token_symbol} on {venue2_name} (fixed quantity)"
-            ),
+            description=scenario_desc,
             profit_usdt_equiv=profit1,
             leg1=(
                 f"SELL {qty_token} {config.venue1_token_symbol} on {venue1_name} "
                 f"for ~{venue1_sell_proceeds:.4f} USDT"
             ),
-            leg2=(
-                f"BUY {qty_token} {config.venue2_token_symbol} on {venue2_name} "
+            leg2=conversion_leg if conversion_leg else None,
+            leg3=(
+                f"BUY {qty_venue2_token:.4f} {config.venue2_token_symbol} on {venue2_name} "
                 f"for ~{venue2_buy_cost:.4f} USDT"
             ),
         )
     )
 
     # ===== Scenario 2: Fixed USDT amount =====
-    # Buy on venue1 with usdt_amount, sell on venue2
+    # Buy on venue1 with usdt_amount, convert if needed, sell on venue2
 
     # Buy on venue1
     if config.venue1_type == 'cex':
@@ -204,18 +245,36 @@ def find_arb_for_qty(
             token_symbol=config.venue1_token_symbol,
             stable_symbol=config.venue1_stable_symbol,
             stable_amount=usdt_amount,
+            chain_id=config.venue1_chain_id,
         )
     else:
         raise ValueError(f"Unknown venue1_type: {config.venue1_type}")
 
     # Convert if needed (for cross-token arb)
+    conversion_leg2 = None
     if config.venue1_token_symbol != config.venue2_token_symbol:
         # Only supported on DEX
-        if config.venue1_type == 'dex':
+        if config.venue2_type == 'dex':
             venue2_tokens = dex_eth_convert_token_to_token(
                 input_token_symbol=config.venue1_token_symbol,
                 output_token_symbol=config.venue2_token_symbol,
                 qty_input=venue1_tokens_bought,
+                chain_id=config.venue2_chain_id,
+            )
+            conversion_leg2 = (
+                f"CONVERT {venue1_tokens_bought:.4f} {config.venue1_token_symbol} → "
+                f"~{venue2_tokens:.4f} {config.venue2_token_symbol} on DEX Chain-{config.venue2_chain_id}"
+            )
+        elif config.venue1_type == 'dex':
+            venue2_tokens = dex_eth_convert_token_to_token(
+                input_token_symbol=config.venue1_token_symbol,
+                output_token_symbol=config.venue2_token_symbol,
+                qty_input=venue1_tokens_bought,
+                chain_id=config.venue1_chain_id,
+            )
+            conversion_leg2 = (
+                f"CONVERT {venue1_tokens_bought:.4f} {config.venue1_token_symbol} → "
+                f"~{venue2_tokens:.4f} {config.venue2_token_symbol} on DEX Chain-{config.venue1_chain_id}"
             )
         else:
             # For CEX, assume 1:1 for now (or skip conversion)
@@ -236,23 +295,29 @@ def find_arb_for_qty(
             input_token_symbol=config.venue2_token_symbol,
             stable_symbol=config.venue2_stable_symbol,
             qty_input=venue2_tokens,
+            chain_id=config.venue2_chain_id,
         )
     else:
         raise ValueError(f"Unknown venue2_type: {config.venue2_type}")
 
     profit2 = venue2_sell_proceeds - usdt_amount
+
+    scenario2_desc = (
+        f"{prefix}Buy {config.venue1_token_symbol} on {venue1_name} with USDT, "
+        f"{'convert, ' if config.venue1_token_symbol != config.venue2_token_symbol else ''}"
+        f"sell {config.venue2_token_symbol} on {venue2_name} (fixed USDT amount)"
+    )
+
     scenarios.append(
         ArbScenario(
-            description=(
-                f"{prefix}Buy {config.venue1_token_symbol} on {venue1_name} with USDT, "
-                f"sell {config.venue2_token_symbol} on {venue2_name} (fixed USDT amount)"
-            ),
+            description=scenario2_desc,
             profit_usdt_equiv=profit2,
             leg1=(
                 f"BUY ~{venue1_tokens_bought:.4f} {config.venue1_token_symbol} on {venue1_name} "
                 f"for ~{usdt_amount:.4f} USDT"
             ),
-            leg2=(
+            leg2=conversion_leg2 if conversion_leg2 else None,
+            leg3=(
                 f"SELL ~{venue2_tokens:.4f} {config.venue2_token_symbol} on {venue2_name} "
                 f"for ~{venue2_sell_proceeds:.4f} USDT"
             ),
@@ -270,7 +335,10 @@ def pretty_print_scenarios(scenarios: List[ArbScenario], min_profit: float = 0.0
         print(f"{mark} {s.description}")
         print(f"    Profit: {s.profit_usdt_equiv:.6f} USDT-equivalent")
         print(f"    Leg1:   {s.leg1}")
-        print(f"    Leg2:   {s.leg2}")
+        if s.leg2:
+            print(f"    Leg2:   {s.leg2}")
+        if s.leg3:
+            print(f"    Leg3:   {s.leg3}")
         print()
 
 
@@ -295,9 +363,13 @@ def send_arb_alerts(
             f"*Estimated Profit:* `{s.profit_usdt_equiv:.6f} USDT-equivalent`\n\n"
             f"*Leg 1:*\n"
             f"`{s.leg1}`\n\n"
-            f"*Leg 2:*\n"
-            f"`{s.leg2}`\n"
         )
+
+        if s.leg2:
+            msg += f"*Leg 2:*\n`{s.leg2}`\n\n"
+
+        if s.leg3:
+            msg += f"*Leg 3:*\n`{s.leg3}`\n"
 
         notifier.send_message(msg, urgent=True)
 
