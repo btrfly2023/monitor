@@ -24,7 +24,6 @@
                 "dex_token_symbol": "WFRAX",
                 "dex_chain_id": 1,
                 "dex_stable_symbol": "USDT",
-                "fixed_token_qty": 2000,
                 "fixed_usdt_amount": 2000,
                 "alert_threshold": 10.0,
                 "info_threshold": 5.0,
@@ -40,7 +39,6 @@
                 "venue2_token_symbol": "frxETH_fraxtal",
                 "venue2_chain_id": 252,
                 "venue2_stable_symbol": "frxUSD_fraxtal",
-                "fixed_token_qty": 1,
                 "fixed_usdt_amount": 3000,
                 "alert_threshold": 8.0,
                 "info_threshold": 4.0
