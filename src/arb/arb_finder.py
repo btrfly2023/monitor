@@ -52,21 +52,19 @@ class ArbConfig:
         venue2_token_symbol='WFRAX_fraxtal'
         venue2_stable_symbol='frxUSD_fraxtal'
     """
-    # Venue 1 (sell venue)
+    # Required fields (no defaults)
     venue1_type: str  # 'cex' or 'dex'
     venue1_token_symbol: str
+    venue2_type: str  # 'cex' or 'dex'
+    venue2_token_symbol: str
+
+    # Optional fields (with defaults)
     venue1_symbol: Optional[str] = None  # For CEX: trading pair like 'FXSUSDT'
     venue1_chain_id: Optional[int] = None  # For DEX: chain ID
     venue1_stable_symbol: Optional[str] = None  # For DEX: stable coin symbol
-
-    # Venue 2 (buy venue)
-    venue2_type: str  # 'cex' or 'dex'
-    venue2_token_symbol: str
     venue2_symbol: Optional[str] = None  # For CEX: trading pair
     venue2_chain_id: Optional[int] = None  # For DEX: chain ID
     venue2_stable_symbol: Optional[str] = None  # For DEX: stable coin symbol
-
-    # Common settings
     description_prefix: str = ""
     use_testnet: bool = False
 
