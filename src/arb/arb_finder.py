@@ -145,32 +145,3 @@ def _make_telegram_notifier_from_env() -> Optional[TelegramNotifier]:
     return notifier
 
 
-if __name__ == "__main__":
-    BINANCE_SYMBOL = "FXSUSDT"
-    QTY_FXS = 2000.0      # Fixed FXS quantity for scenario 1
-    USDT_AMOUNT = 2000.0  # Fixed USDT amount for scenario 2
-
-    # MIN_PROFIT_ALERT = 10.0  # USDT-equivalent
-    MIN_PROFIT_ALERT = -10.0  # USDT-equivalent
-
-    scenarios = find_arb_for_qty(
-        qty_fxs=QTY_FXS,
-        usdt_amount=USDT_AMOUNT,
-        binance_symbol=BINANCE_SYMBOL,
-        use_testnet=False,
-    )
-    pretty_print_scenarios(scenarios, min_profit=MIN_PROFIT_ALERT)
-
-    notifier = _make_telegram_notifier_from_env()
-    if notifier:
-        send_arb_alerts(
-            scenarios,
-            min_profit=MIN_PROFIT_ALERT,
-            notifier=notifier,
-            binance_symbol=BINANCE_SYMBOL,
-            qty_fxs=QTY_FXS,
-            usdt_amount=USDT_AMOUNT,
-        )
-    else:
-        print("Telegram notifier not configured; skipping alerts.")
-
