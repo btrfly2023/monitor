@@ -2,18 +2,18 @@
 
 """
 DEX adapter: uses Odos via src.tokens.token_swap.get_token_swap_quote
-to quote tokens on Ethereum and Fraxtal.
+to quote tokens on multiple chains (Ethereum, Fraxtal, etc.).
 
-On Ethereum:
-    WFRAX <-> USDT
+Exports generic helpers that work across chains:
+    dex_sell_token_for_stable() - Sell any token for stable on any chain
+    dex_buy_token_from_stable() - Buy any token with stable on any chain
+    dex_convert_token_to_token() - Convert any token to any token on any chain
 
-On Fraxtal:
-    WFRAX_fraxtal <-> frxUSD_fraxtal (for backward compatibility)
-
-Exports for WFRAX (Ethereum):
+Exports for WFRAX (Ethereum, backward compatibility):
     dex_eth_sell_wfrax_proceeds_usdt(qty_wfrax) - Sell WFRAX, get USDT
     dex_eth_buy_wfrax_cost_usdt(qty_wfrax) - Cost to buy qty_wfrax WFRAX
     dex_eth_buy_wfrax_from_usdt(usdt_amount) - Buy WFRAX with USDT, get WFRAX amount
+    dex_eth_convert_wfrax_to_fxs(qty_wfrax) - Convert WFRAX to FXS
 
 Exports for WFRAX (Fraxtal, backward compatibility):
     dex_fraxtal_buy_cost_stable_wfrax(qty_wfrax)
@@ -53,32 +53,172 @@ def _get_address(symbol: str) -> str:
     raise ValueError(f"Token symbol {symbol} not in TOKEN_ADDRESSES")
 
 
-# =====================================================================
-# Ethereum DEX: WFRAX <-> USDT
-# =====================================================================
+#######################################################################
+# Generic multi-chain DEX helpers
+#######################################################################
+
+def dex_sell_token_for_stable(
+    input_token_symbol: str,
+    stable_symbol: str,
+    qty_input: float,
+    chain_id: int = ETH_CHAIN_ID,
+) -> float:
+    """
+    Proceeds in `stable_symbol` from selling `qty_input` of `input_token_symbol`
+    on any DEX chain.
+
+    Example: input_token_symbol='WFRAX', stable_symbol='USDT', chain_id=1
+    Direction: input_token -> stable
+    """
+    input_addr = _get_address(input_token_symbol)
+    stable_addr = _get_address(stable_symbol)
+
+    quote = get_token_swap_quote(
+        input_token=input_token_symbol,
+        output_token=stable_symbol,
+        input_token_address=input_addr,
+        output_token_address=stable_addr,
+        amount=qty_input,
+        api="odos",
+        chain_id=chain_id,
+    )
+    if quote is None:
+        raise RuntimeError(
+            f"Odos quote failed for {input_token_symbol} -> {stable_symbol} on chain {chain_id}"
+        )
+
+    return quote["output_amount"]
+
+
+def dex_buy_token_from_stable(
+    token_symbol: str,
+    stable_symbol: str,
+    stable_amount: float,
+    chain_id: int = ETH_CHAIN_ID,
+) -> float:
+    """
+    How much `token_symbol` can be bought with `stable_amount` of `stable_symbol`
+    on any DEX chain.
+
+    Example: token_symbol='WFRAX', stable_symbol='USDT', chain_id=1
+    Direction: stable -> token
+    """
+    token_addr = _get_address(token_symbol)
+    stable_addr = _get_address(stable_symbol)
+
+    quote = get_token_swap_quote(
+        input_token=stable_symbol,
+        output_token=token_symbol,
+        input_token_address=stable_addr,
+        output_token_address=token_addr,
+        amount=stable_amount,
+        api="odos",
+        chain_id=chain_id,
+    )
+    if quote is None:
+        raise RuntimeError(
+            f"Odos quote failed for {stable_symbol} -> {token_symbol} on chain {chain_id}"
+        )
+
+    return quote["output_amount"]
+
+
+def dex_convert_token_to_token(
+    input_token_symbol: str,
+    output_token_symbol: str,
+    qty_input: float,
+    chain_id: int = ETH_CHAIN_ID,
+) -> float:
+    """
+    Swap any token to any token on any DEX chain via Odos; returns output token amount.
+
+    Example: WFRAX -> FXS on Ethereum (chain_id=1)
+    Direction: input_token -> output_token
+    """
+    input_addr = _get_address(input_token_symbol)
+    output_addr = _get_address(output_token_symbol)
+
+    quote = get_token_swap_quote(
+        input_token=input_token_symbol,
+        output_token=output_token_symbol,
+        input_token_address=input_addr,
+        output_token_address=output_addr,
+        amount=qty_input,
+        api="odos",
+        chain_id=chain_id,
+    )
+    if quote is None:
+        raise RuntimeError(
+            f"Odos quote failed for {input_token_symbol} -> {output_token_symbol} on chain {chain_id}"
+        )
+
+    return quote["output_amount"]
+
+
+#######################################################################
+# Ethereum DEX helpers (backward compatibility wrappers)
+#######################################################################
+
+def dex_eth_sell_token_for_stable(
+    input_token_symbol: str,
+    stable_symbol: str,
+    qty_input: float,
+) -> float:
+    """
+    Ethereum-specific wrapper for backward compatibility.
+    """
+    return dex_sell_token_for_stable(
+        input_token_symbol=input_token_symbol,
+        stable_symbol=stable_symbol,
+        qty_input=qty_input,
+        chain_id=ETH_CHAIN_ID,
+    )
+
+
+def dex_eth_buy_token_from_stable(
+    token_symbol: str,
+    stable_symbol: str,
+    stable_amount: float,
+) -> float:
+    """
+    Ethereum-specific wrapper for backward compatibility.
+    """
+    return dex_buy_token_from_stable(
+        token_symbol=token_symbol,
+        stable_symbol=stable_symbol,
+        stable_amount=stable_amount,
+        chain_id=ETH_CHAIN_ID,
+    )
+
+
+def dex_eth_convert_token_to_token(
+    input_token_symbol: str,
+    output_token_symbol: str,
+    qty_input: float,
+) -> float:
+    """
+    Ethereum-specific wrapper for backward compatibility.
+    """
+    return dex_convert_token_to_token(
+        input_token_symbol=input_token_symbol,
+        output_token_symbol=output_token_symbol,
+        qty_input=qty_input,
+        chain_id=ETH_CHAIN_ID,
+    )
+
+
+#######################################################################
+# WFRAX-specific helpers (backward compatibility)
+#######################################################################
 
 def dex_eth_sell_wfrax_proceeds_usdt(qty_wfrax: float) -> float:
     """
     Proceeds in USDT (Ethereum) from SELLING `qty_wfrax` WFRAX on ETH DEX.
 
     Direction: WFRAX -> USDT
+    (Backward compatibility wrapper)
     """
-    wfrax_address = _get_address("WFRAX")
-
-    quote = get_token_swap_quote(
-        input_token="WFRAX",
-        output_token=ETH_STABLE_SYMBOL,
-        input_token_address=wfrax_address,
-        output_token_address=ETH_STABLE_ADDRESS,
-        amount=qty_wfrax,        # human WFRAX
-        api="odos",
-        chain_id=ETH_CHAIN_ID,
-    )
-    if quote is None:
-        raise RuntimeError("Odos ETH quote failed for WFRAX -> USDT")
-
-    usdt_received = quote["output_amount"]  # human USDT
-    return usdt_received
+    return dex_eth_sell_token_for_stable("WFRAX", ETH_STABLE_SYMBOL, qty_wfrax)
 
 
 def dex_eth_buy_wfrax_cost_usdt(qty_wfrax: float) -> float:
@@ -106,7 +246,7 @@ def dex_eth_buy_wfrax_cost_usdt(qty_wfrax: float) -> float:
         raise RuntimeError("Odos ETH quote failed for WFRAX -> USDT (initial estimate)")
 
     usdt_estimate = sell_quote["output_amount"]  # USDT from selling qty_wfrax
-    
+
     # Quote buy direction with estimated amount
     buy_quote = get_token_swap_quote(
         input_token=ETH_STABLE_SYMBOL,
@@ -138,7 +278,7 @@ def dex_eth_buy_wfrax_cost_usdt(qty_wfrax: float) -> float:
         if buy_quote is None:
             return adjusted_usdt  # Return estimate if quote fails
         return buy_quote["input_amount"]
-    
+
     return buy_quote["input_amount"]
 
 
@@ -148,22 +288,9 @@ def dex_eth_buy_wfrax_from_usdt(usdt_amount: float) -> float:
 
     Direction: USDT -> WFRAX
     Returns: amount of WFRAX received
+    (Backward compatibility wrapper)
     """
-    wfrax_address = _get_address("WFRAX")
-
-    quote = get_token_swap_quote(
-        input_token=ETH_STABLE_SYMBOL,
-        output_token="WFRAX",
-        input_token_address=ETH_STABLE_ADDRESS,
-        output_token_address=wfrax_address,
-        amount=usdt_amount,  # human USDT
-        api="odos",
-        chain_id=ETH_CHAIN_ID,
-    )
-    if quote is None:
-        raise RuntimeError("Odos ETH quote failed for USDT -> WFRAX")
-
-    return quote["output_amount"]  # human WFRAX
+    return dex_eth_buy_token_from_stable("WFRAX", ETH_STABLE_SYMBOL, usdt_amount)
 
 
 def dex_eth_convert_wfrax_to_fxs(qty_wfrax: float) -> float:
@@ -173,23 +300,9 @@ def dex_eth_convert_wfrax_to_fxs(qty_wfrax: float) -> float:
 
     Direction: WFRAX -> FXS
     Returns: amount of FXS received
+    (Backward compatibility wrapper)
     """
-    wfrax_address = _get_address("WFRAX")
-    fxs_address = _get_address("FXS")
-
-    quote = get_token_swap_quote(
-        input_token="WFRAX",
-        output_token="FXS",
-        input_token_address=wfrax_address,
-        output_token_address=fxs_address,
-        amount=qty_wfrax,  # human WFRAX
-        api="odos",
-        chain_id=ETH_CHAIN_ID,
-    )
-    if quote is None:
-        raise RuntimeError("Odos ETH quote failed for WFRAX -> FXS")
-
-    return quote["output_amount"]  # human FXS
+    return dex_eth_convert_token_to_token("WFRAX", "FXS", qty_wfrax)
 
 
 # =====================================================================
@@ -203,22 +316,12 @@ def dex_fraxtal_sell_proceeds_stable_wfrax(qty_wfrax: float) -> float:
 
     Direction: WFRAX_fraxtal -> frxUSD_fraxtal
     """
-    wfrax_address = FRAXTAL_WFRAX_ADDRESS
-
-    quote = get_token_swap_quote(
-        input_token=FRAXTAL_WFRAX_SYMBOL,
-        output_token=FRAXTAL_STABLE_SYMBOL,
-        input_token_address=wfrax_address,
-        output_token_address=FRAXTAL_STABLE_ADDRESS,
-        amount=qty_wfrax,         # human WFRAX
-        api="odos",
+    return dex_sell_token_for_stable(
+        input_token_symbol=FRAXTAL_WFRAX_SYMBOL,
+        stable_symbol=FRAXTAL_STABLE_SYMBOL,
+        qty_input=qty_wfrax,
         chain_id=FRAXTAL_CHAIN_ID,
     )
-    if quote is None:
-        raise RuntimeError("Odos Fraxtal quote failed for WFRAX -> frxUSD_fraxtal")
-
-    stable_received = quote["output_amount"]  # human frxUSD_fraxtal
-    return stable_received
 
 
 def dex_fraxtal_buy_cost_stable_wfrax(qty_wfrax: float) -> float:
@@ -243,7 +346,7 @@ def dex_fraxtal_buy_cost_stable_wfrax(qty_wfrax: float) -> float:
         raise RuntimeError("Odos Fraxtal quote failed for WFRAX -> frxUSD_fraxtal (initial estimate)")
 
     stable_estimate = sell_quote["output_amount"]  # frxUSD_fraxtal
-    
+
     # Quote buy direction
     buy_quote = get_token_swap_quote(
         input_token=FRAXTAL_STABLE_SYMBOL,
@@ -274,5 +377,5 @@ def dex_fraxtal_buy_cost_stable_wfrax(qty_wfrax: float) -> float:
         if buy_quote is None:
             return adjusted_stable
         return buy_quote["input_amount"]
-    
+
     return buy_quote["input_amount"]
