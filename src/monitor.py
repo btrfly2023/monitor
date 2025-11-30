@@ -517,7 +517,7 @@ class BlockchainMonitor:
                     info_opps = []
 
                     for s in scenarios:
-                        p = s.profit_usdt_equiv
+                        p = s.profit_usdt
                         if p > alert_threshold:
                             big_opps.append(s)
                         elif p > info_threshold:
@@ -528,22 +528,30 @@ class BlockchainMonitor:
                         msg = (
                             f"*ARB ALERT - {name}*\n\n"
                             f"*Type:* {arb_type}\n"
-                            f"*Profit:* `{s.profit_usdt_equiv:.6f}` USDT-equivalent\n\n"
+                            f"*Starting Amount:* `{usdt_amount:.2f}` USDT\n"
+                            f"*Profit:* `{s.profit_usdt:.6f}` USDT\n\n"
                             f"*Scenario:* {s.description}\n\n"
                             f"*Leg 1:*\n`{s.leg1}`\n\n"
-                            f"*Leg 2:*\n`{s.leg2}`\n"
                         )
+                        if s.leg2:
+                            msg += f"*Leg 2:*\n`{s.leg2}`\n\n"
+                        if s.leg3:
+                            msg += f"*Leg 3:*\n`{s.leg3}`\n"
                         telegram.send_message(msg, urgent=True)
 
                     # 2) Info-only opportunities (non-urgent)
                     for s in info_opps:
                         msg = (
                             f"Arb info - {name} ({arb_type}):\n"
-                            f"Profit: {s.profit_usdt_equiv:.6f} USDT-equivalent\n"
+                            f"Starting: {usdt_amount:.2f} USDT\n"
+                            f"Profit: {s.profit_usdt:.6f} USDT\n"
                             f"Scenario: {s.description}\n"
                             f"Leg 1: {s.leg1}\n"
-                            f"Leg 2: {s.leg2}\n"
                         )
+                        if s.leg2:
+                            msg += f"Leg 2: {s.leg2}\n"
+                        if s.leg3:
+                            msg += f"Leg 3: {s.leg3}\n"
                         telegram.send_message_second_bot(msg)
 
                     total_big_opps += len(big_opps)
