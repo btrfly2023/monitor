@@ -14,7 +14,7 @@ from .dex_adapter import (
     dex_buy_token_from_stable,
 )
 
-from src.notifiers.telegram import TelegramNotifier  # adjust import if needed
+from src.notifiers.telegram import TelegramNotifier
 
 
 @dataclass
@@ -28,49 +28,22 @@ class ArbScenario:
 
 @dataclass
 class ArbConfig:
-    """
-    Generic arb configuration supporting:
-    1. CEX-DEX arbitrage (Binance <-> Ethereum DEX)
-    2. DEX-DEX arbitrage (Ethereum DEX <-> Another chain DEX)
-
-    For CEX-DEX:
-        venue1_type='cex'
-        venue1_symbol='FXSUSDT'
-        venue1_token_symbol='FXS'
-        venue2_type='dex'
-        venue2_chain_id=1
-        venue2_token_symbol='WFRAX'
-        venue2_stable_symbol='USDT'
-
-    For DEX-DEX (cross-chain):
-        venue1_type='dex'
-        venue1_chain_id=1
-        venue1_token_symbol='frxETH'
-        venue1_stable_symbol='frxUSD'
-        venue2_type='dex'
-        venue2_chain_id=252
-        venue2_token_symbol='frxETH_fraxtal'
-        venue2_stable_symbol='frxUSD_fraxtal'
-    """
-    # Required fields (no defaults)
-    venue1_type: str  # 'cex' or 'dex'
+    """Generic arb configuration for CEX-DEX and DEX-DEX arbitrage"""
+    venue1_type: str
     venue1_token_symbol: str
-    venue2_type: str  # 'cex' or 'dex'
+    venue2_type: str
     venue2_token_symbol: str
-
-    # Optional fields (with defaults)
-    venue1_symbol: Optional[str] = None  # For CEX: trading pair like 'FXSUSDT'
-    venue1_chain_id: Optional[int] = None  # For DEX: chain ID
-    venue1_stable_symbol: Optional[str] = None  # For DEX: stable coin symbol
-    venue2_symbol: Optional[str] = None  # For CEX: trading pair
-    venue2_chain_id: Optional[int] = None  # For DEX: chain ID
-    venue2_stable_symbol: Optional[str] = None  # For DEX: stable coin symbol
+    venue1_symbol: Optional[str] = None
+    venue1_chain_id: Optional[int] = None
+    venue1_stable_symbol: Optional[str] = None
+    venue2_symbol: Optional[str] = None
+    venue2_chain_id: Optional[int] = None
+    venue2_stable_symbol: Optional[str] = None
     description_prefix: str = ""
     use_testnet: bool = False
 
 
 def _is_cross_chain_dex_dex(config: ArbConfig) -> bool:
-    """Check if this is a cross-chain DEX-DEX arbitrage"""
     return (
         config.venue1_type == 'dex' and 
         config.venue2_type == 'dex' and 
@@ -79,7 +52,6 @@ def _is_cross_chain_dex_dex(config: ArbConfig) -> bool:
 
 
 def _is_cex_dex(config: ArbConfig) -> bool:
-    """Check if this is CEX-DEX arbitrage"""
     return (
         (config.venue1_type == 'cex' and config.venue2_type == 'dex') or
         (config.venue1_type == 'dex' and config.venue2_type == 'cex')
@@ -87,25 +59,16 @@ def _is_cex_dex(config: ArbConfig) -> bool:
 
 
 def find_arb_for_qty(
-    qty_token: float,  # Deprecated, kept for backward compatibility
+    qty_token: float,
     usdt_amount: float,
     config: ArbConfig,
 ) -> List[ArbScenario]:
     """
-    Simplified arb finder: Always start with USDT, end with USDT.
+    USDT-only arbitrage: Always start with USDT, end with USDT.
 
     Two scenarios:
-    1. Buy on venue1, sell on venue2 (with bridging/conversion if needed)
-    2. Buy on venue2, sell on venue1 (with bridging/conversion if needed)
-
-    Both scenarios:
-    - Start with fixed USDT amount
-    - End with USDT amount
-    - Profit = Final USDT - Initial USDT
-
-    Supports:
-    - CEX-DEX: Buy FXS on Binance → Sell WFRAX on DEX (or reverse)
-    - DEX-DEX: Buy frxETH on ETH → Bridge → Sell on Fraxtal (or reverse)
+    1. Buy on venue1, convert/bridge, sell on venue2
+    2. Buy on venue2, convert/bridge, sell on venue1
     """
     scenarios: List[ArbScenario] = []
     prefix = f"[{config.description_prefix}] " if config.description_prefix else ""
@@ -113,7 +76,7 @@ def find_arb_for_qty(
     is_cross_chain = _is_cross_chain_dex_dex(config)
     is_cex_dex = _is_cex_dex(config)
 
-    # Get venue names for display
+    # Venue names
     if config.venue1_type == 'cex':
         venue1_name = f"Binance ({config.venue1_symbol})"
     else:
@@ -125,24 +88,27 @@ def find_arb_for_qty(
         venue2_name = f"DEX Chain-{config.venue2_chain_id}"
 
     # ===== Scenario 1: Buy on venue1, sell on venue2 =====
-    # CEX-DEX: Buy FXS on Binance → Sell WFRAX on DEX
-    # DEX-DEX: Buy frxETH on ETH → Bridge → Sell on Fraxtal
-
     try:
         # Step 1: Buy token on venue1 with usdt_amount
         if config.venue1_type == 'cex':
             client = make_binance_client(use_testnet=config.use_testnet)
-            # For CEX, we need to estimate how much token we can buy
-            # Get current price by doing a test sell
+            # FIXED: Use binance_buy_cost_usdt to get actual buy cost
+            # Start with rough estimate
             test_qty = 1.0
-            test_proceeds = binance_sell_proceeds_usdt(client, config.venue1_symbol, test_qty)
-            if test_proceeds > 0:
-                price_per_token = test_proceeds / test_qty
-                estimated_qty = usdt_amount / price_per_token
+            test_buy_cost = binance_buy_cost_usdt(client, config.venue1_symbol, test_qty)
+            if test_buy_cost > 0:
+                # Price per token when buying
+                buy_price = test_buy_cost / test_qty
+                # How many tokens can we buy with usdt_amount?
+                venue1_tokens_bought = usdt_amount / buy_price
             else:
-                estimated_qty = usdt_amount / 100  # Fallback estimate
+                # Fallback: use sell price as estimate
+                test_sell = binance_sell_proceeds_usdt(client, config.venue1_symbol, test_qty)
+                if test_sell > 0:
+                    venue1_tokens_bought = usdt_amount / (test_sell / test_qty)
+                else:
+                    venue1_tokens_bought = usdt_amount / 1.0  # Last resort
 
-            venue1_tokens_bought = estimated_qty
             venue1_cost = usdt_amount
         elif config.venue1_type == 'dex':
             venue1_tokens_bought = dex_buy_token_from_stable(
@@ -160,10 +126,9 @@ def find_arb_for_qty(
         venue2_tokens_to_sell = venue1_tokens_bought
 
         if is_cex_dex:
-            # CEX-DEX: Need to convert tokens (e.g., FXS → WFRAX)
-            # For CEX → DEX: Buy FXS on Binance, convert to WFRAX on DEX
+            # CEX-DEX: Convert tokens (e.g., FXS → WFRAX)
             if config.venue1_type == 'cex':
-                # Convert venue1_token to venue2_token on DEX
+                # Buy FXS on Binance, convert to WFRAX on DEX
                 from .dex_adapter import dex_convert_token_to_token
                 venue2_tokens_to_sell = dex_convert_token_to_token(
                     input_token_symbol=config.venue1_token_symbol,
@@ -175,7 +140,6 @@ def find_arb_for_qty(
                     f"CONVERT ~{venue1_tokens_bought:.6f} {config.venue1_token_symbol} → "
                     f"~{venue2_tokens_to_sell:.6f} {config.venue2_token_symbol} on DEX Chain-{config.venue2_chain_id}"
                 )
-            # For DEX → CEX: No conversion needed, tokens are the same
 
         elif is_cross_chain:
             # DEX-DEX cross-chain: Bridge the token
@@ -184,7 +148,7 @@ def find_arb_for_qty(
                 f"from Chain-{config.venue1_chain_id} → "
                 f"{config.venue2_token_symbol} on Chain-{config.venue2_chain_id}"
             )
-            venue2_tokens_to_sell = venue1_tokens_bought  # Assume 1:1 bridging
+            venue2_tokens_to_sell = venue1_tokens_bought
 
         # Step 3: Sell token on venue2
         if config.venue2_type == 'cex':
@@ -234,23 +198,23 @@ def find_arb_for_qty(
         traceback.print_exc()
 
     # ===== Scenario 2: Buy on venue2, sell on venue1 =====
-    # CEX-DEX: Buy WFRAX on DEX → Sell FXS on Binance
-    # DEX-DEX: Buy frxETH on Fraxtal → Bridge → Sell on ETH
-
     try:
         # Step 1: Buy token on venue2 with usdt_amount
         if config.venue2_type == 'cex':
             client = make_binance_client(use_testnet=config.use_testnet)
-            # Estimate how much token we can buy
+            # FIXED: Use binance_buy_cost_usdt
             test_qty = 1.0
-            test_proceeds = binance_sell_proceeds_usdt(client, config.venue2_symbol, test_qty)
-            if test_proceeds > 0:
-                price_per_token = test_proceeds / test_qty
-                estimated_qty = usdt_amount / price_per_token
+            test_buy_cost = binance_buy_cost_usdt(client, config.venue2_symbol, test_qty)
+            if test_buy_cost > 0:
+                buy_price = test_buy_cost / test_qty
+                venue2_tokens_bought = usdt_amount / buy_price
             else:
-                estimated_qty = usdt_amount / 100
+                test_sell = binance_sell_proceeds_usdt(client, config.venue2_symbol, test_qty)
+                if test_sell > 0:
+                    venue2_tokens_bought = usdt_amount / (test_sell / test_qty)
+                else:
+                    venue2_tokens_bought = usdt_amount / 1.0
 
-            venue2_tokens_bought = estimated_qty
             venue2_cost = usdt_amount
         elif config.venue2_type == 'dex':
             venue2_tokens_bought = dex_buy_token_from_stable(
@@ -268,13 +232,9 @@ def find_arb_for_qty(
         venue1_tokens_to_sell = venue2_tokens_bought
 
         if is_cex_dex:
-            # CEX-DEX: Need to convert tokens
-            # For DEX → CEX: Buy WFRAX on DEX, convert to FXS on DEX
-            if config.venue2_type == 'cex':
-                # No conversion needed, tokens are the same
-                pass
-            else:
-                # Convert venue2_token to venue1_token on DEX
+            # CEX-DEX: Convert tokens
+            if config.venue2_type == 'dex':
+                # Buy WFRAX on DEX, convert to FXS
                 from .dex_adapter import dex_convert_token_to_token
                 venue1_tokens_to_sell = dex_convert_token_to_token(
                     input_token_symbol=config.venue2_token_symbol,
@@ -294,7 +254,7 @@ def find_arb_for_qty(
                 f"from Chain-{config.venue2_chain_id} → "
                 f"{config.venue1_token_symbol} on Chain-{config.venue1_chain_id}"
             )
-            venue1_tokens_to_sell = venue2_tokens_bought  # Assume 1:1 bridging
+            venue1_tokens_to_sell = venue2_tokens_bought
 
         # Step 3: Sell token on venue1
         if config.venue1_type == 'cex':
