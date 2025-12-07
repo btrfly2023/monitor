@@ -77,35 +77,6 @@ class AlertSystem:
             logger.error(f"Error checking change alert: {e}")
             return False
 
-    def check_threshold_alert(self, alert, current_value):
-        """Check if a threshold alert should be triggered."""
-        try:
-            threshold = float(alert.get('threshold', 0))
-            operator = alert.get('operator', '>')
-
-            # Convert current_value to float if it's a string
-            if isinstance(current_value, str):
-                current_value = float(current_value)
-
-            if operator == '>':
-                return current_value > threshold
-            elif operator == '<':
-                return current_value < threshold
-            elif operator == '>=':
-                return current_value >= threshold
-            elif operator == '<=':
-                return current_value <= threshold
-            elif operator == '==':
-                return current_value == threshold
-            elif operator == '!=':
-                return current_value != threshold
-            else:
-                logger.error(f"Unknown operator {operator} for threshold alert")
-                return False
-        except (ValueError, TypeError) as e:
-            logger.error(f"Error checking threshold alert: {e}")
-            return False
-
     def check_percent_change_alert(self, alert, current_value, previous_value):
         """Check if a percent change alert should be triggered."""
         try:
@@ -175,11 +146,15 @@ class AlertSystem:
         if description:
             message += f"{description}\n\n"
 
-        change_value = int(current_value) - int(previous_value)
+        try:
+            change_value = float(current_value) - float(previous_value)
+            change_str = f"{change_value:.6f}" if isinstance(current_value, float) else str(int(change_value))
+        except (ValueError, TypeError):
+            change_str = "N/A"
         message += f"Query: `{query_id}`\n"
         message += f"Previous value: `{previous_value}`\n"
         message += f"Current value: `{current_value}`\n"
-        message += f"Change value: `{change_value}`\n"
+        message += f"Change value: `{change_str}`\n"
         message += f"Time: `{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}`"
 
         # Send notifications

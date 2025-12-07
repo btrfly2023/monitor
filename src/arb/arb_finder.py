@@ -1,8 +1,11 @@
 # src/arb/arb_finder.py
 
+import logging
 from dataclasses import dataclass
 from typing import List, Optional
 import os
+
+logger = logging.getLogger('blockchain_monitor.arb')
 
 from .binance_adapter import (
     make_binance_client,
@@ -108,8 +111,6 @@ def find_arb_for_qty(
                     venue1_tokens_bought = usdt_amount / (test_sell / test_qty)
                 else:
                     venue1_tokens_bought = usdt_amount / 1.0  # Last resort
-
-            venue1_cost = usdt_amount
         elif config.venue1_type == 'dex':
             venue1_tokens_bought = dex_buy_token_from_stable(
                 token_symbol=config.venue1_token_symbol,
@@ -117,7 +118,6 @@ def find_arb_for_qty(
                 stable_amount=usdt_amount,
                 chain_id=config.venue1_chain_id,
             )
-            venue1_cost = usdt_amount
         else:
             raise ValueError(f"Unknown venue1_type: {config.venue1_type}")
 
@@ -193,9 +193,7 @@ def find_arb_for_qty(
             )
         )
     except Exception as e:
-        print(f"Error in scenario 1: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"Error in scenario 1: {e}", exc_info=True)
 
     # ===== Scenario 2: Buy on venue2, sell on venue1 =====
     try:
@@ -214,8 +212,6 @@ def find_arb_for_qty(
                     venue2_tokens_bought = usdt_amount / (test_sell / test_qty)
                 else:
                     venue2_tokens_bought = usdt_amount / 1.0
-
-            venue2_cost = usdt_amount
         elif config.venue2_type == 'dex':
             venue2_tokens_bought = dex_buy_token_from_stable(
                 token_symbol=config.venue2_token_symbol,
@@ -223,7 +219,6 @@ def find_arb_for_qty(
                 stable_amount=usdt_amount,
                 chain_id=config.venue2_chain_id,
             )
-            venue2_cost = usdt_amount
         else:
             raise ValueError(f"Unknown venue2_type: {config.venue2_type}")
 
@@ -299,26 +294,23 @@ def find_arb_for_qty(
             )
         )
     except Exception as e:
-        print(f"Error in scenario 2: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"Error in scenario 2: {e}", exc_info=True)
 
     scenarios.sort(key=lambda s: s.profit_usdt)
     return scenarios
 
 
 def pretty_print_scenarios(scenarios: List[ArbScenario], min_profit: float = 0.0):
-    print("=== Arbitrage Scenarios (sorted by profit, low -> high) ===")
+    logger.info("=== Arbitrage Scenarios (sorted by profit, low -> high) ===")
     for s in scenarios:
         mark = ">>>" if s.profit_usdt > min_profit else "   "
-        print(f"{mark} {s.description}")
-        print(f"    Profit: {s.profit_usdt:.6f} USDT")
-        print(f"    Leg1:   {s.leg1}")
+        logger.info(f"{mark} {s.description}")
+        logger.info(f"    Profit: {s.profit_usdt:.6f} USDT")
+        logger.info(f"    Leg1:   {s.leg1}")
         if s.leg2:
-            print(f"    Leg2:   {s.leg2}")
+            logger.info(f"    Leg2:   {s.leg2}")
         if s.leg3:
-            print(f"    Leg3:   {s.leg3}")
-        print()
+            logger.info(f"    Leg3:   {s.leg3}")
 
 
 def send_arb_alerts(

@@ -10,7 +10,6 @@ import logging
 from logging.handlers import RotatingFileHandler
 import threading
 import asyncio
-import ast
 
 # Add the project root to the path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -62,7 +61,7 @@ class BlockchainMonitor:
 
         # Other initialization
         self.last_update_time = 0
-        self.update_interval = 600  # 5 minutes in seconds
+        self.update_interval = 600  # 10 minutes in seconds
 
         # Hot wallet monitor
         self.hot_wallet_monitor = None
@@ -580,7 +579,7 @@ class BlockchainMonitor:
     def start(self):
         logger.info("Starting blockchain monitor")
 
-        # Start hot wallet monitor in separate thread
+        # Hot wallet monitor disabled
         # self.start_hot_wallet_monitor_thread()
 
         # Run immediately on start

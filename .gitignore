@@ -33,6 +33,13 @@ config/secure/keys.json
 config/secure/*.json
 !config/secure/*.example.json
 
+# Process files
+*.pid
+.pid
+
+# Test files
+test.png
+
 # OS specific
 .DS_Store
 .DS_Store?
