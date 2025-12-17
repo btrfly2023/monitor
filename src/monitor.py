@@ -58,6 +58,7 @@ class BlockchainMonitor:
         self.setup_notifiers()
         self.alert_system = AlertSystem(self.config, self.notifiers)
         self.previous_results = {}
+        self.value_history = {}  # Track recent values to detect flip states
 
         # Other initialization
         self.last_update_time = 0
@@ -234,9 +235,23 @@ class BlockchainMonitor:
                     logger.info(f"~~~query {query_id}: {result}")
 
                     if previous is not None and previous != result:
-                        logger.info(f"Change detected for query {query_id}")
-                        # Process alerts
-                        self.alert_system.process_alert(query_id, result, previous)
+                        # Check for flip state (value returning to a recently seen value)
+                        history = self.value_history.get(query_id, [])
+                        is_flip = result in history
+                        
+                        if is_flip:
+                            logger.warning(f"Flip state detected for {query_id}: {previous} -> {result} (seen before, skipping alert)")
+                        else:
+                            logger.info(f"Change detected for query {query_id}")
+                            # Process alerts
+                            self.alert_system.process_alert(query_id, result, previous)
+
+                    # Update value history (keep last 5 values)
+                    if query_id not in self.value_history:
+                        self.value_history[query_id] = []
+                    self.value_history[query_id].append(result)
+                    if len(self.value_history[query_id]) > 5:
+                        self.value_history[query_id].pop(0)
 
                     # Store the new result
                     self.previous_results[query_id] = result
