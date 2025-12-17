@@ -172,7 +172,7 @@ class BlockchainMonitor:
 
     def get_chain_api_url(self, chain_name):
         chain_configs = {
-            'ethereum': 'https://api.etherscan.io/api',  # v1 API - more stable than v2
+            'ethereum': 'https://api.etherscan.io/v2/api',
             'polygon': 'https://api.polygonscan.com/api',
             'bsc': 'https://api.bscscan.com/api',
         }
