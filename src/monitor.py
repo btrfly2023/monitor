@@ -235,12 +235,14 @@ class BlockchainMonitor:
                     logger.info(f"~~~query {query_id}: {result}")
 
                     if previous is not None and previous != result:
-                        # Check for flip state (value returning to a recently seen value)
+                        # Check for flip state - detect oscillation between values
+                        # A flip is when BOTH the previous and current values have been seen recently
+                        # This catches API inconsistency where values bounce between states
                         history = self.value_history.get(query_id, [])
-                        is_flip = result in history
+                        is_flip = result in history and previous in history
                         
                         if is_flip:
-                            logger.warning(f"Flip state detected for {query_id}: {previous} -> {result} (seen before, skipping alert)")
+                            logger.warning(f"Flip state detected for {query_id}: {previous} -> {result} (oscillating between known values, skipping alert)")
                         else:
                             logger.info(f"Change detected for query {query_id}")
                             # Process alerts
