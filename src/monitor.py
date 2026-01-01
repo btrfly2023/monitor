@@ -24,6 +24,14 @@ from src.arb.arb_finder import (
     ArbConfig,
 )
 
+# Import CEX-DEX monitor
+try:
+    from src.arb.cex_dex_monitor import CexDexMonitor, TokenConfig, SpreadResult
+    CEX_DEX_AVAILABLE = True
+except ImportError:
+    CEX_DEX_AVAILABLE = False
+    logging.warning("CEX-DEX monitor not available")
+
 # Import hot wallet monitor
 try:
     from src.monitors.hot_wallet_monitor import HotWalletMonitor
@@ -68,6 +76,11 @@ class BlockchainMonitor:
         self.hot_wallet_monitor = None
         self.hot_wallet_thread = None
         self.hot_wallet_loop = None
+        
+        # CEX-DEX monitor
+        self.cex_dex_monitor = None
+        self.cex_dex_thread = None
+        self.cex_dex_running = False
 
     def load_config(self):
         try:
@@ -593,11 +606,106 @@ class BlockchainMonitor:
             logger.error(f"Error in check_arb_opportunities: {e}", exc_info=True)
             return False
 
+    def start_cex_dex_monitor_thread(self):
+        """Start CEX-DEX monitor in a separate thread"""
+        if not CEX_DEX_AVAILABLE:
+            logger.warning("CEX-DEX monitor not available, skipping")
+            return
+
+        cex_dex_config = self.config.get('settings', {}).get('cex_dex_monitors', [])
+        if not cex_dex_config:
+            logger.info("No CEX-DEX monitors configured, skipping")
+            return
+
+        telegram = self.notifiers.get('telegram')
+
+        def on_alert(result: SpreadResult, token: TokenConfig):
+            msg = (
+                f"*CEX-DEX ARB ALERT - {token.name}*\n\n"
+                f"*Direction:* {result.best_direction}\n"
+                f"*Profit:* `${result.best_profit_usd:.2f}`\n"
+                f"*Trade Size:* `${result.trade_size_usd:.0f}`\n\n"
+                f"*Binance:* `${result.binance_price:.4f}`\n"
+                f"*DEX Sell:* `${result.dex_sell_price:.4f}`\n"
+                f"*DEX Buy:* `${result.dex_buy_price:.4f}`"
+            )
+            if telegram:
+                telegram.send_message(msg, urgent=True)
+
+        def on_info(result: SpreadResult, token: TokenConfig):
+            msg = (
+                f"CEX-DEX arb info - {token.name}:\n"
+                f"Direction: {result.best_direction}\n"
+                f"Profit: ${result.best_profit_usd:.2f}\n"
+                f"Trade Size: ${result.trade_size_usd:.0f}"
+            )
+            if telegram:
+                telegram.send_message_second_bot(msg)
+
+        def on_status(results: list):
+            """Send periodic status update to info channel."""
+            lines = ["CEX-DEX Monitor Status:"]
+            for r in results:
+                lines.append(f"  {r.name}: Binance ${r.binance_price:.4f}, DEX ${r.dex_sell_price:.4f}")
+                lines.append(f"    Sell DEX: ${r.profit_sell_dex_usd:.2f}, Buy DEX: ${r.profit_buy_dex_usd:.2f}")
+            msg = "\n".join(lines)
+            if telegram:
+                telegram.send_message_second_bot(msg)
+
+        # Build token configs from settings
+        tokens = []
+        for cfg in cex_dex_config:
+            if not cfg.get('enabled', True):
+                continue
+            tokens.append(TokenConfig(
+                name=cfg.get('name', ''),
+                symbol=cfg.get('symbol', ''),
+                binance_symbol=cfg.get('binance_symbol', ''),
+                dex_token_address=cfg.get('dex_token_address', ''),
+                dex_stable_address=cfg.get('dex_stable_address', ''),
+                dex_stable_symbol=cfg.get('dex_stable_symbol', 'USDT'),
+                chain_id=cfg.get('chain_id', 1),
+                fixed_usdt_amount=cfg.get('fixed_usdt_amount', 1000),
+                alert_threshold=cfg.get('alert_threshold', 10.0),
+                info_threshold=cfg.get('info_threshold', 5.0),
+            ))
+
+        if not tokens:
+            logger.info("No enabled CEX-DEX monitors, skipping")
+            return
+
+        status_interval = self.config.get('settings', {}).get('cex_dex_status_interval_seconds', 600)
+        self.cex_dex_monitor = CexDexMonitor(
+            tokens=tokens, on_alert=on_alert, on_info=on_info, on_status=on_status,
+            status_interval_seconds=status_interval
+        )
+        interval = self.config.get('settings', {}).get('cex_dex_interval_seconds', 10)
+
+        def run_cex_dex_monitor():
+            logger.info(f"Starting CEX-DEX monitor with {len(tokens)} tokens, interval {interval}s")
+            self.cex_dex_running = True
+            first_run = True
+            while self.cex_dex_running:
+                try:
+                    self.cex_dex_monitor.check_all(force_status=first_run)
+                    first_run = False
+                    time.sleep(interval)
+                except Exception as e:
+                    logger.error(f"CEX-DEX monitor error: {e}")
+                    time.sleep(interval)
+
+        self.cex_dex_thread = threading.Thread(target=run_cex_dex_monitor, daemon=True)
+        self.cex_dex_thread.start()
+        logger.info("CEX-DEX monitor thread started")
+
     def start(self):
         logger.info("Starting blockchain monitor")
 
         # Hot wallet monitor disabled
         # self.start_hot_wallet_monitor_thread()
+        
+        # Start CEX-DEX monitor thread
+        self.start_cex_dex_monitor_thread()
 
         # Run immediately on start
         self.run_queries()
@@ -628,6 +736,9 @@ class BlockchainMonitor:
     def stop(self):
         """Clean shutdown of all monitors"""
         logger.info("Shutting down monitors...")
+
+        # Stop CEX-DEX monitor
+        self.cex_dex_running = False
 
         # Stop hot wallet monitor
         if self.hot_wallet_monitor and self.hot_wallet_loop:

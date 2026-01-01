@@ -14,6 +14,23 @@
     "settings": {
         "interval_minutes": 0.5,
         "log_retention_days": 7,
+        "cex_dex_interval_seconds": 10,
+        "cex_dex_status_interval_seconds": 600,
+        "cex_dex_monitors": [
+            {
+                "name": "CVX CEX-DEX",
+                "enabled": true,
+                "symbol": "CVX",
+                "binance_symbol": "CVXUSDT",
+                "dex_token_address": "0x4e3FBD56CD56c3e72c1403e103b45Db9da5B9D2B",
+                "dex_stable_address": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+                "dex_stable_symbol": "USDT",
+                "chain_id": 1,
+                "fixed_usdt_amount": 1000,
+                "alert_threshold": 10.0,
+                "info_threshold": 5.0
+            }
+        ],
         "arb_monitors": [
             {
                 "name": "FXS CEX-DEX",
