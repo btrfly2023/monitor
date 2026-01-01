@@ -3,20 +3,29 @@
 Real-time CEX-DEX spread monitor.
 Compares Binance prices with Ethereum DEX prices (via Odos) and alerts on arbitrage opportunities.
 
-Uses same config structure as arb_finder:
-- alert_threshold: USD profit to send urgent alert
-- info_threshold: USD profit to send info message
+Uses shared adapters:
+- binance_adapter for Binance price/orderbook
+- dex_adapter for DEX quotes via Odos
 """
 
 import time
 import logging
-import requests
 import json
-import websocket
 import threading
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Callable
 from datetime import datetime
+
+# Use shared adapters
+from .binance_adapter import get_orderbook as binance_get_orderbook, BINANCE_TRADING_FEE
+from .dex_adapter import dex_sell_token_for_stable, dex_buy_token_from_stable
+
+# WebSocket support (optional)
+try:
+    import websocket
+    WEBSOCKET_AVAILABLE = True
+except ImportError:
+    WEBSOCKET_AVAILABLE = False
 
 logger = logging.getLogger('blockchain_monitor.cex_dex')
 
@@ -27,9 +36,8 @@ class TokenConfig:
     name: str                      # e.g., "CVX CEX-DEX"
     symbol: str                    # e.g., "CVX"
     binance_symbol: str            # e.g., "CVXUSDT"
-    dex_token_address: str         # Ethereum address
-    dex_stable_address: str        # USDT/USDC address on Ethereum
-    dex_stable_symbol: str         # e.g., "USDT"
+    dex_token_symbol: str          # Token symbol in TOKEN_ADDRESSES
+    dex_stable_symbol: str         # Stable symbol in TOKEN_ADDRESSES
     chain_id: int = 1              # Default Ethereum mainnet
     fixed_usdt_amount: float = 1000  # Trade size in USD
     alert_threshold: float = 10.0    # USD profit for urgent alert
@@ -37,56 +45,18 @@ class TokenConfig:
     enabled: bool = True
 
 
-# Common token addresses
-USDT_ADDRESS = "0xdAC17F958D2ee523a2206206994597C13D831ec7"
-USDC_ADDRESS = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
-WETH_ADDRESS = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
-
 DEFAULT_TOKENS = [
     TokenConfig(
         name="CVX CEX-DEX",
         symbol="CVX",
         binance_symbol="CVXUSDT",
-        dex_token_address="0x4e3FBD56CD56c3e72c1403e103b45Db9da5B9D2B",
-        dex_stable_address=USDT_ADDRESS,
+        dex_token_symbol="CVX",
         dex_stable_symbol="USDT",
         fixed_usdt_amount=1000,
         alert_threshold=10.0,
         info_threshold=5.0,
     ),
 ]
-
-
-class BinancePriceFetcher:
-    """Fetches real-time prices from Binance."""
-    
-    BASE_URL = "https://api.binance.com/api/v3"
-    
-    def get_price(self, symbol: str) -> Optional[float]:
-        """Get current price for a symbol."""
-        try:
-            resp = requests.get(f"{self.BASE_URL}/ticker/price", params={"symbol": symbol}, timeout=5)
-            if resp.status_code == 200:
-                return float(resp.json()["price"])
-        except Exception as e:
-            logger.error(f"Binance price error for {symbol}: {e}")
-        return None
-    
-    def get_orderbook(self, symbol: str, limit: int = 5) -> Optional[Dict]:
-        """Get orderbook for a symbol."""
-        try:
-            resp = requests.get(f"{self.BASE_URL}/depth", params={"symbol": symbol, "limit": limit}, timeout=5)
-            if resp.status_code == 200:
-                data = resp.json()
-                return {
-                    "best_bid": float(data["bids"][0][0]),
-                    "best_ask": float(data["asks"][0][0]),
-                    "bid_qty": float(data["bids"][0][1]),
-                    "ask_qty": float(data["asks"][0][1]),
-                }
-        except Exception as e:
-            logger.error(f"Binance orderbook error for {symbol}: {e}")
-        return None
 
 
 class BinanceWebSocket:
@@ -98,25 +68,25 @@ class BinanceWebSocket:
             symbols: List of symbols to subscribe (e.g., ["CVXUSDT"])
             on_price_update: Callback(symbol, bid, ask) called on each price update
         """
+        if not WEBSOCKET_AVAILABLE:
+            raise ImportError("websocket-client not installed")
         self.symbols = [s.lower() for s in symbols]
         self.on_price_update = on_price_update
         self.ws = None
         self.running = False
         self.thread = None
-        self.prices: Dict[str, Dict] = {}  # symbol -> {bid, ask, ts}
+        self.prices: Dict[str, Dict] = {}
         
-        # Build combined stream URL
         streams = "/".join([f"{s}@bookTicker" for s in self.symbols])
         self.ws_url = f"wss://stream.binance.com:9443/stream?streams={streams}"
     
     def _on_message(self, ws, message):
         try:
             data = json.loads(message)
-            # Combined stream wraps data in {"stream": "...", "data": {...}}
             if "data" in data:
                 data = data["data"]
             symbol = data.get("s", "").upper()
-            if "b" in data and "a" in data:  # bookTicker stream
+            if "b" in data and "a" in data:
                 bid = float(data["b"])
                 ask = float(data["a"])
                 self.prices[symbol] = {"bid": bid, "ask": ask, "ts": time.time()}
@@ -150,73 +120,18 @@ class BinanceWebSocket:
         self.ws.run_forever(ping_interval=30, ping_timeout=10)
     
     def start(self):
-        """Start WebSocket connection in background thread."""
         self.running = True
         self.thread = threading.Thread(target=self._connect, daemon=True)
         self.thread.start()
         logger.info("Binance WebSocket started")
     
     def stop(self):
-        """Stop WebSocket connection."""
         self.running = False
         if self.ws:
             self.ws.close()
     
     def get_price(self, symbol: str) -> Optional[Dict]:
-        """Get latest cached price for symbol."""
         return self.prices.get(symbol.upper())
-
-
-class OdosPriceFetcher:
-    """Fetches DEX prices via Odos API."""
-    
-    QUOTE_URL = "https://api.odos.xyz/sor/quote/v2"
-    
-    def get_quote(self, input_token: str, output_token: str, amount: float, 
-                  input_decimals: int = 18, chain_id: int = 1) -> Optional[Dict]:
-        """Get swap quote from Odos."""
-        try:
-            input_amount = str(int(amount * (10 ** input_decimals)))
-            body = {
-                "chainId": chain_id,
-                "inputTokens": [{"tokenAddress": input_token, "amount": input_amount}],
-                "outputTokens": [{"tokenAddress": output_token, "proportion": 1}],
-                "slippageLimitPercent": 0.5,
-                "userAddr": "0x0000000000000000000000000000000000000000",
-                "referralCode": 0,
-                "disableRFQs": True,
-                "compact": True,
-            }
-            resp = requests.post(self.QUOTE_URL, json=body, headers={"Content-Type": "application/json"}, timeout=10)
-            if resp.status_code == 200:
-                data = resp.json()
-                out_amount = float(data["outAmounts"][0])
-                # USDT has 6 decimals
-                output_decimals = 6 if "usdt" in output_token.lower() or output_token == USDT_ADDRESS else 18
-                return {
-                    "input_amount": amount,
-                    "output_amount": out_amount / (10 ** output_decimals),
-                    "price": (out_amount / (10 ** output_decimals)) / amount,
-                }
-        except Exception as e:
-            logger.error(f"Odos quote error: {e}")
-        return None
-    
-    def get_token_price_in_stable(self, token_address: str, stable_address: str, 
-                                   amount: float = 100, chain_id: int = 1) -> Optional[float]:
-        """Get token price in stable (sell token for stable)."""
-        quote = self.get_quote(token_address, stable_address, amount, chain_id=chain_id)
-        if quote:
-            return quote["price"]
-        return None
-    
-    def get_stable_to_token_rate(self, stable_address: str, token_address: str,
-                                  stable_amount: float = 1000, chain_id: int = 1) -> Optional[float]:
-        """Get how many tokens you get for stable_amount (buy token with stable)."""
-        quote = self.get_quote(stable_address, token_address, stable_amount, input_decimals=6, chain_id=chain_id)
-        if quote:
-            return quote["output_amount"]
-        return None
 
 
 @dataclass
@@ -247,11 +162,9 @@ class CexDexMonitor:
                  use_websocket: bool = False,
                  status_interval_seconds: int = 600):
         self.tokens = tokens or DEFAULT_TOKENS
-        self.binance = BinancePriceFetcher()
-        self.odos = OdosPriceFetcher()
         self.on_alert = on_alert
         self.on_info = on_info
-        self.on_status = on_status  # Called every status_interval with all results
+        self.on_status = on_status
         self.running = False
         self.last_results: Dict[str, SpreadResult] = {}
         self.status_interval_seconds = status_interval_seconds
@@ -260,49 +173,47 @@ class CexDexMonitor:
         # WebSocket mode
         self.use_websocket = use_websocket
         self.binance_ws = None
-        if use_websocket:
+        if use_websocket and WEBSOCKET_AVAILABLE:
             symbols = [t.binance_symbol for t in self.tokens if t.enabled]
             self.binance_ws = BinanceWebSocket(symbols, self._on_ws_price_update)
     
     def _on_ws_price_update(self, symbol: str, bid: float, ask: float):
-        """Called on each WebSocket price update - check for arb immediately."""
-        # Find matching token
+        """Called on each WebSocket price update."""
         for token in self.tokens:
             if token.binance_symbol == symbol and token.enabled:
                 self._check_spread_ws(token, bid, ask)
                 break
     
     def _check_spread_ws(self, token: TokenConfig, binance_bid: float, binance_ask: float):
-        """Check spread using WebSocket price (faster than REST)."""
+        """Check spread using WebSocket price."""
         binance_mid = (binance_bid + binance_ask) / 2
         token_amount = token.fixed_usdt_amount / binance_mid
         
-        # Get DEX prices (still REST - could cache/rate limit)
-        dex_sell_price = self.odos.get_token_price_in_stable(
-            token.dex_token_address, token.dex_stable_address,
-            amount=token_amount, chain_id=token.chain_id
-        )
-        if not dex_sell_price:
+        # Get DEX prices using shared adapter
+        try:
+            dex_sell_proceeds = dex_sell_token_for_stable(
+                token.dex_token_symbol, token.dex_stable_symbol,
+                token_amount, chain_id=token.chain_id
+            )
+            dex_sell_price = dex_sell_proceeds / token_amount
+            
+            tokens_from_dex = dex_buy_token_from_stable(
+                token.dex_token_symbol, token.dex_stable_symbol,
+                token.fixed_usdt_amount, chain_id=token.chain_id
+            )
+            dex_buy_price = token.fixed_usdt_amount / tokens_from_dex
+        except Exception as e:
+            logger.debug(f"DEX quote failed: {e}")
             return
-        
-        tokens_from_dex = self.odos.get_stable_to_token_rate(
-            token.dex_stable_address, token.dex_token_address,
-            stable_amount=token.fixed_usdt_amount, chain_id=token.chain_id
-        )
-        if not tokens_from_dex:
-            return
-        
-        dex_buy_price = token.fixed_usdt_amount / tokens_from_dex
         
         # Calculate profits
-        binance_fee = 0.001
-        buy_binance_cost = binance_ask * (1 + binance_fee) * token_amount
+        buy_binance_cost = binance_ask * (1 + BINANCE_TRADING_FEE) * token_amount
         sell_dex_proceeds = dex_sell_price * token_amount
         profit_sell_dex_usd = sell_dex_proceeds - buy_binance_cost
         spread_sell_dex_pct = (profit_sell_dex_usd / buy_binance_cost) * 100
         
         buy_dex_cost = token.fixed_usdt_amount
-        sell_binance_proceeds = binance_bid * (1 - binance_fee) * tokens_from_dex
+        sell_binance_proceeds = binance_bid * (1 - BINANCE_TRADING_FEE) * tokens_from_dex
         profit_buy_dex_usd = sell_binance_proceeds - buy_dex_cost
         spread_buy_dex_pct = (profit_buy_dex_usd / buy_dex_cost) * 100
         
@@ -310,19 +221,12 @@ class CexDexMonitor:
         best_profit_usd = max(profit_sell_dex_usd, profit_buy_dex_usd)
         
         result = SpreadResult(
-            token=token.symbol,
-            name=token.name,
-            binance_price=binance_mid,
-            dex_sell_price=dex_sell_price,
-            dex_buy_price=dex_buy_price,
-            spread_sell_dex_pct=spread_sell_dex_pct,
-            spread_buy_dex_pct=spread_buy_dex_pct,
-            profit_sell_dex_usd=profit_sell_dex_usd,
-            profit_buy_dex_usd=profit_buy_dex_usd,
-            best_direction=best_direction,
-            best_profit_usd=best_profit_usd,
-            trade_size_usd=token.fixed_usdt_amount,
-            timestamp=datetime.now(),
+            token=token.symbol, name=token.name, binance_price=binance_mid,
+            dex_sell_price=dex_sell_price, dex_buy_price=dex_buy_price,
+            spread_sell_dex_pct=spread_sell_dex_pct, spread_buy_dex_pct=spread_buy_dex_pct,
+            profit_sell_dex_usd=profit_sell_dex_usd, profit_buy_dex_usd=profit_buy_dex_usd,
+            best_direction=best_direction, best_profit_usd=best_profit_usd,
+            trade_size_usd=token.fixed_usdt_amount, timestamp=datetime.now(),
         )
         self.last_results[token.symbol] = result
         
@@ -347,52 +251,45 @@ class CexDexMonitor:
             self.binance_ws.stop()
     
     def check_spread(self, token: TokenConfig) -> Optional[SpreadResult]:
-        """Check spread for a single token."""
+        """Check spread for a single token using REST API."""
         if not token.enabled:
             return None
             
-        # Get Binance price
-        binance_ob = self.binance.get_orderbook(token.binance_symbol)
+        # Get Binance price using shared adapter
+        binance_ob = binance_get_orderbook(token.binance_symbol)
         if not binance_ob:
             return None
         
-        binance_bid = binance_ob["best_bid"]  # Price to sell on Binance
-        binance_ask = binance_ob["best_ask"]  # Price to buy on Binance
+        binance_bid = binance_ob["best_bid"]
+        binance_ask = binance_ob["best_ask"]
         binance_mid = (binance_bid + binance_ask) / 2
-        
-        # Calculate token amount for trade size
         token_amount = token.fixed_usdt_amount / binance_mid
         
-        # Get DEX sell price (sell token for stable)
-        dex_sell_price = self.odos.get_token_price_in_stable(
-            token.dex_token_address, token.dex_stable_address,
-            amount=token_amount, chain_id=token.chain_id
-        )
-        if not dex_sell_price:
+        # Get DEX prices using shared adapter
+        try:
+            dex_sell_proceeds = dex_sell_token_for_stable(
+                token.dex_token_symbol, token.dex_stable_symbol,
+                token_amount, chain_id=token.chain_id
+            )
+            dex_sell_price = dex_sell_proceeds / token_amount
+            
+            tokens_from_dex = dex_buy_token_from_stable(
+                token.dex_token_symbol, token.dex_stable_symbol,
+                token.fixed_usdt_amount, chain_id=token.chain_id
+            )
+            dex_buy_price = token.fixed_usdt_amount / tokens_from_dex
+        except Exception as e:
+            logger.debug(f"DEX quote failed for {token.symbol}: {e}")
             return None
         
-        # Get DEX buy price (buy token with stable)
-        tokens_from_dex = self.odos.get_stable_to_token_rate(
-            token.dex_stable_address, token.dex_token_address,
-            stable_amount=token.fixed_usdt_amount, chain_id=token.chain_id
-        )
-        if not tokens_from_dex:
-            return None
-        
-        dex_buy_price = token.fixed_usdt_amount / tokens_from_dex  # Effective price per token
-        
-        # Calculate spreads (including 0.1% Binance fee)
-        binance_fee = 0.001
-        
-        # Strategy 1: Buy on Binance, sell on DEX
-        buy_binance_cost = binance_ask * (1 + binance_fee) * token_amount
+        # Calculate profits
+        buy_binance_cost = binance_ask * (1 + BINANCE_TRADING_FEE) * token_amount
         sell_dex_proceeds = dex_sell_price * token_amount
         profit_sell_dex_usd = sell_dex_proceeds - buy_binance_cost
         spread_sell_dex_pct = (profit_sell_dex_usd / buy_binance_cost) * 100
         
-        # Strategy 2: Buy on DEX, sell on Binance
         buy_dex_cost = token.fixed_usdt_amount
-        sell_binance_proceeds = binance_bid * (1 - binance_fee) * tokens_from_dex
+        sell_binance_proceeds = binance_bid * (1 - BINANCE_TRADING_FEE) * tokens_from_dex
         profit_buy_dex_usd = sell_binance_proceeds - buy_dex_cost
         spread_buy_dex_pct = (profit_buy_dex_usd / buy_dex_cost) * 100
         
@@ -400,19 +297,12 @@ class CexDexMonitor:
         best_profit_usd = max(profit_sell_dex_usd, profit_buy_dex_usd)
         
         return SpreadResult(
-            token=token.symbol,
-            name=token.name,
-            binance_price=binance_mid,
-            dex_sell_price=dex_sell_price,
-            dex_buy_price=dex_buy_price,
-            spread_sell_dex_pct=spread_sell_dex_pct,
-            spread_buy_dex_pct=spread_buy_dex_pct,
-            profit_sell_dex_usd=profit_sell_dex_usd,
-            profit_buy_dex_usd=profit_buy_dex_usd,
-            best_direction=best_direction,
-            best_profit_usd=best_profit_usd,
-            trade_size_usd=token.fixed_usdt_amount,
-            timestamp=datetime.now(),
+            token=token.symbol, name=token.name, binance_price=binance_mid,
+            dex_sell_price=dex_sell_price, dex_buy_price=dex_buy_price,
+            spread_sell_dex_pct=spread_sell_dex_pct, spread_buy_dex_pct=spread_buy_dex_pct,
+            profit_sell_dex_usd=profit_sell_dex_usd, profit_buy_dex_usd=profit_buy_dex_usd,
+            best_direction=best_direction, best_profit_usd=best_profit_usd,
+            trade_size_usd=token.fixed_usdt_amount, timestamp=datetime.now(),
         )
     
     def check_all(self, force_status: bool = False) -> List[SpreadResult]:
