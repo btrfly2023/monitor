@@ -19,7 +19,7 @@
         "cex_dex_monitors": [
             {
                 "name": "CVX CEX-DEX",
-                "enabled": true,
+                "enabled": false,
                 "symbol": "CVX",
                 "binance_symbol": "CVXUSDT",
                 "dex_token_symbol": "CVX",
