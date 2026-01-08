@@ -68,24 +68,59 @@ def binance_buy_cost_usdt(client: Client, symbol: str, qty_tokens: float) -> flo
     """
     Approximate USDT cost to buy `qty_tokens` of `symbol` on Binance, including fee.
 
-    - Uses best ask from order book.
-    - For large sizes, you may want to walk the book instead of only top level.
+    - Walks through the order book to account for slippage on larger orders.
     """
-    depth = client.get_order_book(symbol=symbol, limit=10)
-    best_ask = float(depth["asks"][0][0])
-    gross_cost = best_ask * qty_tokens
-    fee = gross_cost * BINANCE_TRADING_FEE
-    return gross_cost + fee
+    depth = client.get_order_book(symbol=symbol, limit=50)
+    asks = depth["asks"]
+    
+    remaining_qty = qty_tokens
+    total_cost = 0.0
+    
+    for price_str, qty_str in asks:
+        if remaining_qty <= 0:
+            break
+        price = float(price_str)
+        available_qty = float(qty_str)
+        
+        fill_qty = min(remaining_qty, available_qty)
+        total_cost += price * fill_qty
+        remaining_qty -= fill_qty
+    
+    # If not enough liquidity, estimate remaining at last price
+    if remaining_qty > 0:
+        last_price = float(asks[-1][0]) if asks else 0
+        total_cost += last_price * remaining_qty
+    
+    fee = total_cost * BINANCE_TRADING_FEE
+    return total_cost + fee
 
 
 def binance_sell_proceeds_usdt(client: Client, symbol: str, qty_tokens: float) -> float:
     """
     Approximate USDT proceeds from selling `qty_tokens` of `symbol` on Binance, after fee.
 
-    - Uses best bid from order book.
+    - Walks through the order book to account for slippage on larger orders.
     """
-    depth = client.get_order_book(symbol=symbol, limit=10)
-    best_bid = float(depth["bids"][0][0])
-    gross_proceeds = best_bid * qty_tokens
-    fee = gross_proceeds * BINANCE_TRADING_FEE
-    return gross_proceeds - fee
+    depth = client.get_order_book(symbol=symbol, limit=50)
+    bids = depth["bids"]
+    
+    remaining_qty = qty_tokens
+    total_proceeds = 0.0
+    
+    for price_str, qty_str in bids:
+        if remaining_qty <= 0:
+            break
+        price = float(price_str)
+        available_qty = float(qty_str)
+        
+        fill_qty = min(remaining_qty, available_qty)
+        total_proceeds += price * fill_qty
+        remaining_qty -= fill_qty
+    
+    # If not enough liquidity, estimate remaining at last price
+    if remaining_qty > 0:
+        last_price = float(bids[-1][0]) if bids else 0
+        total_proceeds += last_price * remaining_qty
+    
+    fee = total_proceeds * BINANCE_TRADING_FEE
+    return total_proceeds - fee
