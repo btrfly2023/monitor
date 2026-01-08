@@ -72,14 +72,14 @@
     },
     "queries": [
         {
-            "id": "c2tp_fxs_balance",
+            "id": "whale_fxs_balance",
             "chain_name": "ethereum",
             "params": {
                 "chainid": 1,
                 "module": "account",
                 "action": "tokenbalance",
                 "contractaddress": "0x3432B6A60D23Ca0dFCa7761B7ab56459D9C964D0",
-                "address": "0xAAc0aa431c237C2C0B5f041c8e59B3f1a43aC78F",
+                "address": "0x12D7Df4910D3DC0867cC7720e3bec6260B4B1100",
                 "tag": "latest"
             }
         },
@@ -144,10 +144,10 @@
     ],
     "alerts": [
         {
-            "id": "c2tp_fxs_balance_alert",
-            "query_id": "c2tp_fxs_balance",
-            "name": "c2tp got fxs!",
-            "description": "c2tp got fxs!",
+            "id": "whale_fxs_balance_alert",
+            "query_id": "whale_fxs_balance",
+            "name": "whale FXS balance change",
+            "description": "whale FXS balance change",
             "type": "threshold",
             "operator": ">",
             "threshold": "1000",
