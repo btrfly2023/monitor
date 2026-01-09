@@ -58,6 +58,20 @@
                 "fixed_usdt_amount": 3000,
                 "alert_threshold": 8.0,
                 "info_threshold": 4.0
+            },
+            {
+                "name": "WFRAX ETH-Fraxtal",
+                "type": "dex-dex",
+                "enabled": true,
+                "venue1_token_symbol": "WFRAX",
+                "venue1_chain_id": 1,
+                "venue1_stable_symbol": "frxUSD",
+                "venue2_token_symbol": "WFRAX_fraxtal",
+                "venue2_chain_id": 252,
+                "venue2_stable_symbol": "frxUSD_fraxtal",
+                "fixed_usdt_amount": 1000,
+                "alert_threshold": 5.0,
+                "info_threshold": 2.0
             }
         ]
     },
