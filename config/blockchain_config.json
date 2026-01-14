@@ -27,7 +27,21 @@
                 "chain_id": 1,
                 "fixed_usdt_amount": 1000,
                 "alert_threshold": 10.0,
-                "info_threshold": 5.0
+                "info_threshold": 5.0,
+                "cex_type": "binance"
+            },
+            {
+                "name": "FRAX Bybit-DEX",
+                "enabled": true,
+                "symbol": "FRAX",
+                "binance_symbol": "FRAXUSDT",
+                "dex_token_symbol": "WFRAX",
+                "dex_stable_symbol": "USDT",
+                "chain_id": 1,
+                "fixed_usdt_amount": 1000,
+                "alert_threshold": 10.0,
+                "info_threshold": 5.0,
+                "cex_type": "bybit"
             }
         ],
         "arb_monitors": [

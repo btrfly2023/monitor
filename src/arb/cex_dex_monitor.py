@@ -18,6 +18,7 @@ from datetime import datetime
 
 # Use shared adapters
 from .binance_adapter import get_orderbook as binance_get_orderbook, BINANCE_TRADING_FEE
+from .bybit_adapter import get_orderbook as bybit_get_orderbook, BYBIT_TRADING_FEE
 from .dex_adapter import dex_sell_token_for_stable, dex_buy_token_from_stable
 
 # WebSocket support (optional)
@@ -35,7 +36,7 @@ class TokenConfig:
     """Configuration for a token to monitor."""
     name: str                      # e.g., "CVX CEX-DEX"
     symbol: str                    # e.g., "CVX"
-    binance_symbol: str            # e.g., "CVXUSDT"
+    binance_symbol: str            # e.g., "CVXUSDT" (also used for Bybit symbol)
     dex_token_symbol: str          # Token symbol in TOKEN_ADDRESSES
     dex_stable_symbol: str         # Stable symbol in TOKEN_ADDRESSES
     chain_id: int = 1              # Default Ethereum mainnet
@@ -43,6 +44,7 @@ class TokenConfig:
     alert_threshold: float = 10.0    # USD profit for urgent alert
     info_threshold: float = 5.0      # USD profit for info message
     enabled: bool = True
+    cex_type: str = "binance"      # "binance" or "bybit"
 
 
 DEFAULT_TOKENS = [
@@ -254,16 +256,23 @@ class CexDexMonitor:
         """Check spread for a single token using REST API."""
         if not token.enabled:
             return None
-            
-        # Get Binance price using shared adapter
-        binance_ob = binance_get_orderbook(token.binance_symbol)
-        if not binance_ob:
+        
+        # Get CEX price using appropriate adapter based on cex_type
+        cex_type = getattr(token, 'cex_type', 'binance')
+        if cex_type == "bybit":
+            cex_ob = bybit_get_orderbook(token.binance_symbol)
+            trading_fee = BYBIT_TRADING_FEE
+        else:
+            cex_ob = binance_get_orderbook(token.binance_symbol)
+            trading_fee = BINANCE_TRADING_FEE
+        
+        if not cex_ob:
             return None
         
-        binance_bid = binance_ob["best_bid"]
-        binance_ask = binance_ob["best_ask"]
-        binance_mid = (binance_bid + binance_ask) / 2
-        token_amount = token.fixed_usdt_amount / binance_mid
+        cex_bid = cex_ob["best_bid"]
+        cex_ask = cex_ob["best_ask"]
+        cex_mid = (cex_bid + cex_ask) / 2
+        token_amount = token.fixed_usdt_amount / cex_mid
         
         # Get DEX prices using shared adapter
         try:
@@ -283,21 +292,21 @@ class CexDexMonitor:
             return None
         
         # Calculate profits
-        buy_binance_cost = binance_ask * (1 + BINANCE_TRADING_FEE) * token_amount
+        buy_cex_cost = cex_ask * (1 + trading_fee) * token_amount
         sell_dex_proceeds = dex_sell_price * token_amount
-        profit_sell_dex_usd = sell_dex_proceeds - buy_binance_cost
-        spread_sell_dex_pct = (profit_sell_dex_usd / buy_binance_cost) * 100
+        profit_sell_dex_usd = sell_dex_proceeds - buy_cex_cost
+        spread_sell_dex_pct = (profit_sell_dex_usd / buy_cex_cost) * 100
         
         buy_dex_cost = token.fixed_usdt_amount
-        sell_binance_proceeds = binance_bid * (1 - BINANCE_TRADING_FEE) * tokens_from_dex
-        profit_buy_dex_usd = sell_binance_proceeds - buy_dex_cost
+        sell_cex_proceeds = cex_bid * (1 - trading_fee) * tokens_from_dex
+        profit_buy_dex_usd = sell_cex_proceeds - buy_dex_cost
         spread_buy_dex_pct = (profit_buy_dex_usd / buy_dex_cost) * 100
         
         best_direction = "sell_dex" if profit_sell_dex_usd > profit_buy_dex_usd else "buy_dex"
         best_profit_usd = max(profit_sell_dex_usd, profit_buy_dex_usd)
         
         return SpreadResult(
-            token=token.symbol, name=token.name, binance_price=binance_mid,
+            token=token.symbol, name=token.name, binance_price=cex_mid,
             dex_sell_price=dex_sell_price, dex_buy_price=dex_buy_price,
             spread_sell_dex_pct=spread_sell_dex_pct, spread_buy_dex_pct=spread_buy_dex_pct,
             profit_sell_dex_usd=profit_sell_dex_usd, profit_buy_dex_usd=profit_buy_dex_usd,

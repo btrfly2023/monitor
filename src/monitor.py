@@ -667,6 +667,7 @@ class BlockchainMonitor:
                 fixed_usdt_amount=cfg.get('fixed_usdt_amount', 1000),
                 alert_threshold=cfg.get('alert_threshold', 10.0),
                 info_threshold=cfg.get('info_threshold', 5.0),
+                cex_type=cfg.get('cex_type', 'binance'),
             ))
 
         if not tokens:
