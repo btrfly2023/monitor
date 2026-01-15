@@ -46,20 +46,6 @@
         ],
         "arb_monitors": [
             {
-                "name": "FXS CEX-DEX",
-                "type": "cex-dex",
-                "enabled": true,
-                "binance_symbol": "FXSUSDT",
-                "binance_token_symbol": "FXS",
-                "dex_token_symbol": "WFRAX",
-                "dex_chain_id": 1,
-                "dex_stable_symbol": "USDT",
-                "fixed_usdt_amount": 2000,
-                "alert_threshold": 10.0,
-                "info_threshold": 5.0,
-                "use_testnet": false
-            },
-            {
                 "name": "frxETH ETH-Fraxtal",
                 "type": "dex-dex",
                 "enabled": true,
