@@ -324,6 +324,7 @@ class CexDexMonitor:
                 self.last_results[token.symbol] = result
                 
                 # Check thresholds and notify
+                logger.debug(f"{token.name}: best_profit=${result.best_profit_usd:.2f}, threshold=${token.alert_threshold}")
                 if result.best_profit_usd >= token.alert_threshold:
                     logger.warning(f"ARB ALERT: {token.name} {result.best_direction} ${result.best_profit_usd:.2f}")
                     if self.on_alert:

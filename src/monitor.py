@@ -625,7 +625,7 @@ class BlockchainMonitor:
                 f"*Direction:* {result.best_direction}\n"
                 f"*Profit:* `${result.best_profit_usd:.2f}`\n"
                 f"*Trade Size:* `${result.trade_size_usd:.0f}`\n\n"
-                f"*Binance:* `${result.binance_price:.4f}`\n"
+                f"*CEX:* `${result.binance_price:.4f}`\n"
                 f"*DEX Sell:* `${result.dex_sell_price:.4f}`\n"
                 f"*DEX Buy:* `${result.dex_buy_price:.4f}`"
             )
@@ -646,7 +646,7 @@ class BlockchainMonitor:
             """Send periodic status update to info channel."""
             lines = ["CEX-DEX Monitor Status:"]
             for r in results:
-                lines.append(f"  {r.name}: Binance ${r.binance_price:.4f}, DEX ${r.dex_sell_price:.4f}")
+                lines.append(f"  {r.name}: CEX ${r.binance_price:.4f}, DEX ${r.dex_sell_price:.4f}")
                 lines.append(f"    Sell DEX: ${r.profit_sell_dex_usd:.2f}, Buy DEX: ${r.profit_buy_dex_usd:.2f}")
             msg = "\n".join(lines)
             if telegram:
