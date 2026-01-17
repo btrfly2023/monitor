@@ -17,66 +17,12 @@
         "cex_dex_interval_seconds": 10,
         "cex_dex_status_interval_seconds": 600,
         "cex_dex_monitors": [
-            {
-                "name": "CVX CEX-DEX",
-                "enabled": false,
-                "symbol": "CVX",
-                "binance_symbol": "CVXUSDT",
-                "dex_token_symbol": "CVX",
-                "dex_stable_symbol": "USDT",
-                "chain_id": 1,
-                "fixed_usdt_amount": 1000,
-                "alert_threshold": 10.0,
-                "info_threshold": 5.0,
-                "cex_type": "binance"
-            },
-            {
-                "name": "FRAX Bybit-DEX",
-                "enabled": true,
-                "symbol": "FRAX",
-                "binance_symbol": "FRAXUSDT",
-                "dex_token_symbol": "WFRAX",
-                "dex_stable_symbol": "USDT",
-                "chain_id": 1,
-                "fixed_usdt_amount": 1000,
-                "alert_threshold": 10.0,
-                "info_threshold": 5.0,
-                "cex_type": "bybit"
-            }
         ],
         "arb_monitors": [
-            {
-                "name": "frxETH ETH-Fraxtal",
-                "type": "dex-dex",
-                "enabled": true,
-                "venue1_token_symbol": "frxETH",
-                "venue1_chain_id": 1,
-                "venue1_stable_symbol": "frxUSD",
-                "venue2_token_symbol": "frxETH_fraxtal",
-                "venue2_chain_id": 252,
-                "venue2_stable_symbol": "frxUSD_fraxtal",
-                "fixed_usdt_amount": 3000,
-                "alert_threshold": 8.0,
-                "info_threshold": 4.0
-            },
-            {
-                "name": "WFRAX ETH-Fraxtal",
-                "type": "dex-dex",
-                "enabled": true,
-                "venue1_token_symbol": "WFRAX",
-                "venue1_chain_id": 1,
-                "venue1_stable_symbol": "frxUSD",
-                "venue2_token_symbol": "WFRAX_fraxtal",
-                "venue2_chain_id": 252,
-                "venue2_stable_symbol": "frxUSD_fraxtal",
-                "fixed_usdt_amount": 1000,
-                "alert_threshold": 5.0,
-                "info_threshold": 2.0
-            }
         ]
     },
     "hot_wallet_monitor": {
-        "enabled": true,
+        "enabled": false,
         "websocket_rpc_url": "ENV",
         "token_thresholds": {
             "0xCAcd6fd266aF91b8AeD52aCCc382b4e165586E29" : 500000
