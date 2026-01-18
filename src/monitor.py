@@ -719,7 +719,7 @@ class BlockchainMonitor:
 
         # Arb checks: e.g. every 5 * interval_minutes
         arb_interval = self.config.get('settings', {}).get('arb_interval_minutes', 5 * interval_minutes)
-        schedule.every(arb_interval).minutes.do(self.check_arb_opportunities)
+        #schedule.every(arb_interval).minutes.do(self.check_arb_opportunities)
 
         try:
             while True:
