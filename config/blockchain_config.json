@@ -121,7 +121,7 @@
             "description": "FXS Balance change above threshold",
             "type": "threshold",
             "operator": ">",
-            "threshold": "500",
+            "threshold": "700",
             "urgency": "high",
             "cooldown_minutes": 0
         },
@@ -132,7 +132,7 @@
             "description": "cvxFXS Balance change above threshold",
             "type": "threshold",
             "operator": ">",
-            "threshold": "800",
+            "threshold": "1200",
             "urgency": "high",
             "cooldown_minutes": 0
         },
@@ -143,7 +143,7 @@
             "description": "fraxtal FXS Balance change above threshold",
             "type": "threshold",
             "operator": ">",
-            "threshold": "500",
+            "threshold": "700",
             "urgency": "high",
             "cooldown_minutes": 0
         },
@@ -154,7 +154,7 @@
             "description": "fraxtal cvxFXS Balance change above threshold",
             "type": "threshold",
             "operator": ">",
-            "threshold": "800",
+            "threshold": "1200",
             "urgency": "high",
             "cooldown_minutes": 0
         }
